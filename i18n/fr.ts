@@ -133,6 +133,7 @@ export const fr = {
     resume: "Reprendre",
     pause: "Pause",
     cancel: "Annuler",
+    resetDownload: "Réinitialiser le téléchargement",
     openFolder: "Ouvrir le dossier",
   },
 
