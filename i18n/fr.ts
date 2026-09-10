@@ -36,7 +36,7 @@ export const fr = {
     disconnectVk: "Déconnecter",
     vkIdPending: "Connexion ouverte dans ton navigateur. Vkomic reviendra automatiquement au premier plan.",
     vkIdFinishing: "Connexion…",
-    vkIdHelp: "Utilise l'application VK officielle de Vkomic ; aucun App ID ni token n'est à saisir.",
+    vkIdHelp: "Utilise l’intégration VK ID enregistrée par Vkomic ; aucun App ID ni token n'est à saisir.",
     vkIdPrivacy: "Vkomic demande uniquement l'accès aux documents nécessaires à la synchronisation.",
     vkAuthError: "Connexion VK ID impossible",
     groupId: "ID du groupe",
@@ -73,7 +73,7 @@ export const fr = {
     syncButton: "Synchroniser depuis VK",
     syncAllButton: "Tout synchroniser",
     syncAllWarning:
-      "Attention : cette opération va précharger tous les dossiers. Selon votre connexion et la charge des serveurs VK, cela peut prendre plusieurs secondes. Idéal si vous comptez utiliser la barre de recherche.",
+      "Cette opération consomme plusieurs appels du quota VK API partagé de Vkomic pour précharger les dossiers. Lancez-la uniquement lorsque c’est nécessaire.",
     syncing: "Synchronisation...",
     searching: "Recherche dans la bibliothèque...",
     noResults: "Ce dossier est vide ou aucun résultat trouvé.",

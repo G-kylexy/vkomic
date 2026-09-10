@@ -11,7 +11,7 @@ import { idbDel, idbGet, idbSet, migrateLocalStorageJsonToIdb } from "./utils/st
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useDownloads } from "./hooks/useDownloads";
 import { useVkConnection } from "./hooks/useVkConnection";
-import { performPassiveSync, tauriDeepLink, tauriSettings, tauriShell, tauriVk } from "./lib/tauri";
+import { tauriDeepLink, tauriSettings, tauriShell, tauriVk } from "./lib/tauri";
 import {
   clearPendingVkAuthorization,
   createVkAuthorizationUrl,
@@ -114,7 +114,6 @@ const App: React.FC = () => {
   // Sync Logic
   const [syncedData, setSyncedData] = useState<VkNode[] | null>(null);
   const [syncedDataHydrated, setSyncedDataHydrated] = useState(false);
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
 
   // --- CUSTOM HOOKS ---
   const update = useAppUpdate();
@@ -287,39 +286,6 @@ const App: React.FC = () => {
     return () => window.clearTimeout(id);
   }, [syncedData, syncedDataHydrated]);
 
-  // --- PASSIVE STARTUP SYNC ---
-  useEffect(() => {
-    // Wait for hydration and ensure we have data/token/fullsync
-    if (!syncedDataHydrated || !syncedData || !vkToken || !hasFullSynced) return;
-    if (sessionStorage.getItem("vk_passive_synced_session")) return;
-
-    const runCheck = async () => {
-      // Small delay to let the app settle
-      await new Promise(r => setTimeout(r, 1500));
-
-      setIsCheckingUpdates(true);
-      try {
-        const result = await performPassiveSync(vkToken, syncedData, vkGroupId);
-        if (result.changedCount > 0) {
-          console.log(`[Startup Sync] Found ${result.changedCount} updates`);
-          setSyncedData(result.updatedData);
-          connection.setVkStatus({
-            ...connection.vkStatus,
-            lastSync: new Date().toISOString()
-          });
-        }
-        // Success: mark session as synced
-        sessionStorage.setItem("vk_passive_synced_session", "true");
-      } catch (err) {
-        console.error("Manual check failed", err);
-      } finally {
-        setIsCheckingUpdates(false);
-      }
-    };
-
-    runCheck();
-  }, [syncedDataHydrated, syncedData, vkToken, hasFullSynced, vkGroupId]);
-
   return (
     <TranslationProvider>
       <div className="flex w-full h-screen bg-[#050B14] overflow-hidden font-sans text-slate-200">
@@ -327,7 +293,7 @@ const App: React.FC = () => {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           vkStatus={connection.vkStatus}
-          isCheckingUpdates={isCheckingUpdates}
+          isCheckingUpdates={false}
           activeDownloadsCount={downloads.downloads.filter(d => ["pending", "downloading"].includes(d.status)).length}
         />
 

@@ -43,7 +43,6 @@ export const VK_API = {
 export const UI = {
     SEARCH_DEBOUNCE_MS: 300,
     DOWNLOAD_THROTTLE_MS: 200,
-    PING_INTERVAL_MS: 3000,
 } as const;
 
 // Search and display limits

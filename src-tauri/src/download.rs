@@ -103,19 +103,23 @@ impl DownloadManager {
         let was_queued = queue.len() != queued_before;
         drop(queue);
 
-        let mut cancel_tokens = self.cancel_tokens.lock().await;
-        let mut active = self.active.lock().await;
-        let was_active = if let Some(sender) = cancel_tokens.remove(&task_id) {
-            let _ = sender.send(true);
-            if let Some(handle) = active.remove(&task_id) {
-                handle.abort();
+        let (was_active, active_handle) = {
+            let mut cancel_tokens = self.cancel_tokens.lock().await;
+            let mut active = self.active.lock().await;
+            let sender = cancel_tokens.remove(&task_id);
+            let active_handle = active.remove(&task_id);
+            if let Some(sender) = sender.as_ref() {
+                let _ = sender.send(true);
             }
-            true
-        } else {
-            false
+            (sender.is_some() || active_handle.is_some(), active_handle)
         };
-        drop(active);
-        drop(cancel_tokens);
+
+        // On Windows, wait until the aborted worker has released its file
+        // handle before the reset command renames the partial file.
+        if let Some(handle) = active_handle {
+            handle.abort();
+            let _ = handle.await;
+        }
 
         self.schedule_next(app).await;
         was_queued || was_active
@@ -394,9 +398,23 @@ async fn download_file_attempt(
     }
 
     let response_content_length = response.content_length();
+    let is_partial_response = response.status() == StatusCode::PARTIAL_CONTENT;
+
+    if is_partial_response {
+        let content_range_start = response
+            .headers()
+            .get(CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(parse_content_range_start);
+        if content_range_start != Some(start_byte) {
+            return Err(anyhow::anyhow!(
+                "VK returned an invalid Content-Range for resume offset {start_byte}"
+            ));
+        }
+    }
 
     // Détermine le mode d'ouverture selon le code HTTP
-    let mut file = if response.status() == 206 {
+    let mut file = if is_partial_response {
         // Contenu partiel (Resume) : On ouvre en append pour ne pas pèter le début
         println!("DEBUG: Status 206 (Partial) - Resuming download");
         tokio::fs::OpenOptions::new()
@@ -420,9 +438,15 @@ async fn download_file_attempt(
             .await?
     };
 
-    let total_size = content_range_total
-        .or(task.expected_size)
-        .or_else(|| response_content_length.map(|l| l + start_byte));
+    let total_size = if is_partial_response {
+        content_range_total
+            .or(task.expected_size)
+            .or_else(|| response_content_length.map(|length| length + start_byte))
+    } else {
+        // A 200 response ignored the Range header and contains the complete
+        // representation. Its own length is authoritative when available.
+        response_content_length.or(task.expected_size)
+    };
 
     // Plus besoin de seek/set_len manuel car géré par les flags OpenOptions
 
@@ -510,7 +534,19 @@ async fn download_file_attempt(
         },
     )?;
 
-    if chunk_size.is_some() && total_size.is_some_and(|total| total_downloaded < total) {
+    if is_partial_response
+        && downloaded == 0
+        && total_size.is_some_and(|total| total_downloaded < total)
+    {
+        return Err(anyhow::anyhow!(
+            "VK returned an empty partial response before the download was complete"
+        ));
+    }
+
+    if chunk_size.is_some()
+        && is_partial_response
+        && total_size.is_some_and(|total| total_downloaded < total)
+    {
         return Ok(DownloadAttemptOutcome::MoreData);
     }
 
@@ -528,6 +564,17 @@ async fn download_file_attempt(
 
 fn parse_content_range_total(value: &str) -> Option<u64> {
     value.rsplit('/').next()?.parse().ok()
+}
+
+fn parse_content_range_start(value: &str) -> Option<u64> {
+    value
+        .strip_prefix("bytes ")?
+        .split_once('/')?
+        .0
+        .split_once('-')?
+        .0
+        .parse()
+        .ok()
 }
 
 pub async fn reset_partial_download(directory: &str, file_name: &str) -> Result<()> {
@@ -555,4 +602,22 @@ async fn preserve_partial(path: &std::path::Path, file_name: &str, reason: &str)
         backup_path,
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_content_range_start, parse_content_range_total};
+
+    #[test]
+    fn parses_content_range_boundaries() {
+        let value = "bytes 33554432-67108863/100000000";
+        assert_eq!(parse_content_range_start(value), Some(33_554_432));
+        assert_eq!(parse_content_range_total(value), Some(100_000_000));
+    }
+
+    #[test]
+    fn rejects_invalid_content_range_start() {
+        assert_eq!(parse_content_range_start("bytes */100"), None);
+        assert_eq!(parse_content_range_start("invalid"), None);
+    }
 }

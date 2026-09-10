@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from "react";
 import { VkConnectionStatus } from "../types";
-import { UI } from "../utils/constants";
 import { mapRegion } from "../utils/region";
 
 import { tauriVk } from "../lib/tauri";
@@ -40,31 +39,12 @@ export const useVkConnection = (vkToken: string) => {
 
         const regionAggregate = mapRegion(rawRegion);
 
-        // Mesure la latence vers VK (via IPC) avec backoff et pause en arrière-plan
-        const BASE_INTERVAL_MS = UI.PING_INTERVAL_MS;
-        const HIDDEN_INTERVAL_MS = Math.max(BASE_INTERVAL_MS * 5, 15000);
-        const NO_TOKEN_INTERVAL_MS = Math.max(BASE_INTERVAL_MS * 10, 30000);
-        const MAX_BACKOFF_MS = 60000;
-
-        let timeoutId: number | null = null;
+        // One validation call per token, instead of polling VK every few seconds.
+        // VK now applies monthly per-account API quotas, so connection status is
+        // subsequently updated by explicit synchronization actions.
         let cancelled = false;
-        let consecutiveFailures = 0;
 
-        const computeBackoff = () =>
-            Math.min(
-                BASE_INTERVAL_MS * 2 ** Math.min(consecutiveFailures, 5),
-                MAX_BACKOFF_MS,
-            );
-
-        const schedule = (delayMs: number) => {
-            if (cancelled) return;
-            if (timeoutId !== null) {
-                window.clearTimeout(timeoutId);
-            }
-            timeoutId = window.setTimeout(loop, delayMs);
-        };
-
-        const measurePing = async (): Promise<"success" | "failure" | "no-token"> => {
+        const measurePing = async () => {
             if (!vkToken) {
                 setVkStatus((prev) => {
                     if (
@@ -85,11 +65,12 @@ export const useVkConnection = (vkToken: string) => {
                         regionAggregate,
                     };
                 });
-                return "no-token";
+                return;
             }
 
             try {
                 const latency = await tauriVk.ping(vkToken);
+                if (cancelled) return;
 
                 setVkStatus((prev) => {
                     const threshold = 50;
@@ -118,8 +99,8 @@ export const useVkConnection = (vkToken: string) => {
                         regionAggregate,
                     };
                 });
-                return "success";
             } catch (e) {
+                if (cancelled) return;
                 setVkStatus((prev) => {
                     if (
                         prev.connected === false &&
@@ -137,61 +118,13 @@ export const useVkConnection = (vkToken: string) => {
                         regionAggregate,
                     };
                 });
-                return "failure";
             }
         };
 
-        const loop = async () => {
-            if (cancelled) return;
-
-            const isHidden =
-                typeof document !== "undefined" && Boolean(document.hidden);
-            if (isHidden) {
-                schedule(HIDDEN_INTERVAL_MS);
-                return;
-            }
-
-            const result = await measurePing();
-            if (cancelled) return;
-
-            if (result === "failure") {
-                consecutiveFailures += 1;
-                schedule(computeBackoff());
-                return;
-            }
-
-            consecutiveFailures = 0;
-
-            if (result === "no-token") {
-                schedule(NO_TOKEN_INTERVAL_MS);
-                return;
-            }
-
-            schedule(BASE_INTERVAL_MS);
-        };
-
-        const handleVisibilityChange = () => {
-            if (cancelled) return;
-            if (typeof document === "undefined") return;
-            if (!document.hidden) {
-                schedule(0);
-            }
-        };
-
-        if (typeof document !== "undefined") {
-            document.addEventListener("visibilitychange", handleVisibilityChange);
-        }
-
-        schedule(0);
+        void measurePing();
 
         return () => {
             cancelled = true;
-            if (timeoutId !== null) {
-                window.clearTimeout(timeoutId);
-            }
-            if (typeof document !== "undefined") {
-                document.removeEventListener("visibilitychange", handleVisibilityChange);
-            }
         };
     }, [vkToken]);
 

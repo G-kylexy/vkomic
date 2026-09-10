@@ -26,7 +26,6 @@ import {
   fetchRootIndex,
   fetchNodeContent,
   fetchFolderTreeUpToDepth,
-  performPassiveSync,
   tauriShell,
 } from "../lib/tauri";
 import { normalizeText } from "../utils/text";

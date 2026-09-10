@@ -38,7 +38,7 @@ export const en: Translations = {
     disconnectVk: "Disconnect",
     vkIdPending: "Sign-in is open in your browser. Vkomic will return to the foreground automatically.",
     vkIdFinishing: "Connecting…",
-    vkIdHelp: "Use Vkomic's official VK application; no App ID or token needs to be entered.",
+    vkIdHelp: "Use the VK ID integration registered by Vkomic; no App ID or token needs to be entered.",
     vkIdPrivacy: "Vkomic requests only the document access required for synchronization.",
     vkAuthError: "Unable to connect to VK ID",
     groupId: "Group ID",
@@ -74,7 +74,7 @@ export const en: Translations = {
     syncButton: "Sync from VK",
     syncAllButton: "Sync everything",
     syncAllWarning:
-      "Warning: this will pre-load all folders. Depending on your connection and VK server load, it may take several seconds. Ideal if you plan to use the search bar.",
+      "This operation uses several calls from Vkomic's shared VK API quota to preload folders. Run it only when needed.",
     syncing: "Syncing...",
     searching: "Searching in library...",
     noResults: "This folder is empty or nothing matches your search.",
