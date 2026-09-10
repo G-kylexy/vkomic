@@ -104,12 +104,16 @@ impl VkApi {
 
     pub async fn ping(&self) -> Result<u64> {
         let start = std::time::Instant::now();
-        let url = format!(
-            "https://api.vk.ru/method/utils.getServerTime?access_token={}&v=5.199",
-            self.token
-        );
         wait_for_vk_api_slot().await;
-        let res = self.client.get(url).send().await?.json::<Value>().await?;
+        let res = self
+            .client
+            .get("https://api.vk.ru/method/utils.getServerTime")
+            .bearer_auth(&self.token)
+            .query(&[("v", "5.199")])
+            .send()
+            .await?
+            .json::<Value>()
+            .await?;
 
         if let Some(err) = res.get("error") {
             return Err(anyhow::anyhow!("VK API error: {}", format_vk_error(err)));
@@ -127,7 +131,6 @@ impl VkApi {
         let group_id = group_id.replace('-', "");
         let offset = offset.to_string();
         let params = [
-            ("access_token", self.token.as_str()),
             ("v", "5.199"),
             ("group_id", group_id.as_str()),
             ("topic_id", topic_id),
@@ -142,6 +145,7 @@ impl VkApi {
             let result = self
                 .client
                 .post("https://api.vk.ru/method/board.getComments")
+                .bearer_auth(&self.token)
                 .form(&params)
                 .send()
                 .await;
@@ -601,15 +605,18 @@ impl VkApi {
     /// Helper: execute VKScript with retry
     async fn execute_with_retry(&self, code: &str) -> Result<Value> {
         let url = "https://api.vk.ru/method/execute";
-        let params = [
-            ("access_token", self.token.as_str()),
-            ("v", "5.199"),
-            ("code", code),
-        ];
+        let params = [("v", "5.199"), ("code", code)];
         let mut attempts = 0;
         loop {
             wait_for_vk_api_slot().await;
-            match self.client.post(url).form(&params).send().await {
+            match self
+                .client
+                .post(url)
+                .bearer_auth(&self.token)
+                .form(&params)
+                .send()
+                .await
+            {
                 Ok(r) => match r.json::<Value>().await {
                     Ok(json) => {
                         if let Some(err) = json.get("error") {

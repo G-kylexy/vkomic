@@ -36,7 +36,6 @@ export const createVkAuthorizationUrl = async (): Promise<string> => {
     code_challenge: base64Url(digest),
     code_challenge_method: "s256",
     state,
-    scope: "docs",
   });
   return `${VK_AUTHORIZATION_ENDPOINT}?${params.toString()}`;
 };
