@@ -4,7 +4,6 @@ export const VK_ANDROID_CLIENT_ID = "54761286";
 export const VK_ANDROID_REDIRECT_URI = `vk${VK_ANDROID_CLIENT_ID}://vk.ru`;
 export const VK_AUTHORIZATION_ENDPOINT = "https://id.vk.ru/authorize";
 export const VK_TOKEN_ENDPOINT = "https://id.vk.ru/oauth2/auth";
-export const VK_API_SCOPE = "docs";
 
 export interface VkAuthSession {
   accessToken: string;
@@ -50,7 +49,6 @@ export const createVkAuthorizationRequest = async (): Promise<{
     code_challenge: base64Url(digest),
     code_challenge_method: "s256",
     state,
-    scope: VK_API_SCOPE,
   });
 
   return {

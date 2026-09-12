@@ -148,28 +148,6 @@ const validateIosDownload = async (result: any, item: DownloadItem) => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const withRetry = async <T,>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelay: number = 1000
-): Promise<T> => {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastError = e as Error;
-      if (attempt < maxRetries - 1) {
-        const delay = baseDelay * Math.pow(2, attempt);
-        await sleep(delay);
-      }
-    }
-  }
-  throw lastError;
-};
-
-
-
 const safeFilename = (value: string) =>
   value
     .replace(/[\\/:*?"<>|]/g, "_")
@@ -283,6 +261,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   // Batched progress updates to avoid race conditions with multiple concurrent downloads
   const pendingProgressRef = useRef(new Map<string, Partial<DownloadItem>>());
   const retryCountRef = useRef(new Map<string, number>());
+  const downloadUrlRefreshNeededRef = useRef(new Set<string>());
   const lastNotifRef = useRef(new Map<string, number>()); // Throttle notifications to 1s
   const MAX_AUTO_RETRIES = 3;
   const RETRY_DELAY_MS = 2000; // 2 seconds between retries
@@ -465,10 +444,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     const hasSignedParameters = /[?&](?:hash|dl)=[^&#]+/i.test(item.url);
     const ownerId = item.vkOwnerId || vkDocumentMatch?.[1];
     const docId = item.vkDocId || vkDocumentMatch?.[2];
+    const needsRefresh = downloadUrlRefreshNeededRef.current.has(item.id);
+
+    // Les URLs des pièces jointes VK sont déjà signées. Ne demander une URL
+    // fraîche qu'après un échec, ou immédiatement pour un lien vk.com/doc nu.
+    if (!needsRefresh && (!vkDocumentMatch || hasSignedParameters)) {
+      return item.url;
+    }
 
     if (ownerId && docId && token) {
       const resolved = await getDocumentDownloadUrl(token, ownerId, docId, item.vkAccessKey);
       if (resolved) {
+        downloadUrlRefreshNeededRef.current.delete(item.id);
         console.log(`[Download] Refreshed document URL for ${item.title}`);
         return resolved;
       }
@@ -493,6 +480,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     saveDownloadsToStorage(updated);
     resumablesRef.current.delete(item.id);
     startingRef.current.delete(item.id);
+    downloadUrlRefreshNeededRef.current.delete(item.id);
     clearRetryCount(item.id);
     clearSpeed(speedRef, item.id);
     NativeNotification.cancelNotification(item.id);
@@ -573,6 +561,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
           saveDownloadsToStorage(updated);
 
           startingRef.current.delete(item.id);
+          downloadUrlRefreshNeededRef.current.delete(item.id);
           clearRetryCount(item.id);
           clearSpeed(speedRef, item.id);
 
@@ -624,6 +613,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
               saveDownloadsToStorage(updated);
 
               startingRef.current.delete(item.id);
+              downloadUrlRefreshNeededRef.current.delete(item.id);
               clearRetryCount(item.id);
               clearSpeed(speedRef, item.id);
               NativeNotification.cancelNotification(item.id);
@@ -695,6 +685,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const isCanceled = err?.message?.includes('canceled') || err?.message?.includes('Canceled');
         if (!isCanceled) {
+          downloadUrlRefreshNeededRef.current.add(item.id);
           const willRetry = scheduleAutoRetry(item.id, item.title);
           if (!willRetry) {
             upsertDownload(item.id, { status: "error", speed: "" });
@@ -764,6 +755,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const isManualPause = item.status === 'paused';
       if (!isManualPause) {
+        downloadUrlRefreshNeededRef.current.add(item.id);
         scheduleAutoRetry(item.id, item.title);
       }
     }
@@ -794,7 +786,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsSyncing(true);
     setError(null);
     try {
-      const nodes = await withRetry(() => fetchRootIndex(token, groupId, topicId), 3, 1000);
+      const nodes = await fetchRootIndex(token, groupId, topicId);
       const merged = syncedData ? mergeTrees(nodes, syncedData) : nodes;
       setSyncedData(merged);
       setNavPath([]);
@@ -813,7 +805,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsSyncing(true);
     setError(null);
     try {
-      const nodes = await withRetry(() => fetchFolderTreeUpToDepth(token, groupId, topicId, 4), 2, 2000);
+      const nodes = await fetchFolderTreeUpToDepth(token, groupId, topicId, 4);
       if (nodes && nodes.length > 0) {
         setHasFullSynced(true);
         setSyncedData(prev => prev ? mergeTrees(nodes, prev) : nodes);
@@ -1001,13 +993,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [isReady, autoSync, token, isSyncing, syncedData, isTokenInvalid]);
 
   useEffect(() => {
-    if (!token || isSyncing || hasFullSynced || isTokenInvalid) return;
-    if (!syncedData || syncedData.length === 0) return;
-    if (prefetchRef.current) return;
-    void InteractionManager.runAfterInteractions(() => prefetchRootStructure(syncedData));
-  }, [token, isSyncing, hasFullSynced, syncedData, isTokenInvalid]);
-
-  useEffect(() => {
     const handle = setTimeout(() => setDebouncedQuery(searchQuery), 180);
     return () => clearTimeout(handle);
   }, [searchQuery]);
@@ -1173,6 +1158,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         console.warn("Resume failed, will restart:", e);
         resumablesRef.current.delete(id);
         startingRef.current.delete(id);
+        downloadUrlRefreshNeededRef.current.add(id);
       }
     }
 
@@ -1184,6 +1170,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       await FileSystem.deleteAsync(current.path, { idempotent: true }).catch(() => undefined);
       resumablesRef.current.delete(id);
       startingRef.current.delete(id);
+      downloadUrlRefreshNeededRef.current.add(id);
       clearSpeed(speedRef, id);
       setDownloads(prev => prev.map(d => d.id === id ? {
         ...d,
@@ -1215,6 +1202,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         startingRef.current.delete(id); // Clean up on failure
         const isCanceled = e?.message?.includes('canceled') || e?.message?.includes('Canceled');
         if (!isCanceled) {
+          downloadUrlRefreshNeededRef.current.add(id);
           upsertDownload(id, { status: "error", speed: "" });
         }
       }
@@ -1243,6 +1231,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     startingRef.current.delete(id);
+    downloadUrlRefreshNeededRef.current.delete(id);
     clearSpeed(speedRef, id);
 
     // Cancel notification

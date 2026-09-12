@@ -22,7 +22,7 @@ const processQueue = async () => {
 };
 
 // Wrapper qui met la requête en file d'attente (fetch)
-const executeRequest = <T>(url: string): Promise<T> => {
+const executeRequest = <T>(url: string, token: string): Promise<T> => {
   return new Promise((resolve, reject) => {
     const task = async () => {
       const controller = new AbortController();
@@ -30,6 +30,7 @@ const executeRequest = <T>(url: string): Promise<T> => {
       try {
         const res = await fetch(url, {
           headers: {
+            Authorization: `Bearer ${token}`,
             "User-Agent": "Vkomic/1.4.2 (+https://github.com/G-kylexy/vkomic)",
             Accept: "application/json",
           },
@@ -82,8 +83,8 @@ export const fetchVkTopic = async (
   offset: number = 0
 ): Promise<any> => {
   if (!token || token.length < 10) throw new Error("Invalid Token");
-  const url = `https://api.vk.ru/method/board.getComments?access_token=${token}&group_id=${groupId}&topic_id=${topicId}&count=100&offset=${offset}&extended=1&v=${API_VERSION}`;
-  return executeRequest(url);
+  const url = `https://api.vk.ru/method/board.getComments?group_id=${groupId}&topic_id=${topicId}&count=100&offset=${offset}&extended=1&v=${API_VERSION}`;
+  return executeRequest(url, token);
 };
 
 // Récupère les premiers commentaires de plusieurs topics en un seul appel execute
@@ -103,10 +104,10 @@ const fetchMultipleTopics = async (
     .join(",");
 
   const code = `return [${calls}];`;
-  const url = `https://api.vk.ru/method/execute?access_token=${token}&v=${API_VERSION}&code=${encodeURIComponent(code)}`;
+  const url = `https://api.vk.ru/method/execute?v=${API_VERSION}&code=${encodeURIComponent(code)}`;
 
   try {
-    const data = await executeRequest<any>(url);
+    const data = await executeRequest<any>(url, token);
     if (data.error || (Array.isArray(data.execute_errors) && data.execute_errors.length > 0)) {
       throw new Error(`VK execute error: ${JSON.stringify(data.error || data.execute_errors)}`);
     }
@@ -159,7 +160,9 @@ const fetchNodesStructureBatch = async (token: string, nodes: VkNode[]): Promise
                 const allItems = await fetchAllComments(
                   token,
                   node.vkGroupId as string,
-                  node.vkTopicId as string
+                  node.vkTopicId as string,
+                  3,
+                  resp
                 );
                 if (allItems && allItems.length > 0) {
                   items = allItems;
@@ -225,10 +228,10 @@ export const searchVkBoard = async (
   const effectiveGroupId =
     groupId && groupId.trim().length > 0 ? groupId.trim() : "203785966";
 
-  const url = `https://api.vk.ru/method/board.getTopics?access_token=${token}&group_id=${effectiveGroupId}&count=100&order=1&preview=1&v=${API_VERSION}`;
+  const url = `https://api.vk.ru/method/board.getTopics?group_id=${effectiveGroupId}&count=100&order=1&preview=1&v=${API_VERSION}`;
 
   try {
-    const data = await executeRequest<any>(url);
+    const data = await executeRequest<any>(url, token);
     if (data.response && data.response.items) {
       const items = data.response.items;
       const lowerQuery = query.toLowerCase();
@@ -669,12 +672,18 @@ const fetchAllComments = async (
   token: string,
   groupId: string,
   topicId: string,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  initialResponse?: { items?: any[]; count?: number }
 ): Promise<any[]> => {
-  const allItems: any[] = [];
-  let offset = 0;
+  const initialItems = Array.isArray(initialResponse?.items) ? initialResponse.items : [];
+  const allItems: any[] = [...initialItems];
+  let offset = initialItems.length;
   const count = 100;
   const MAX_PAGES = 1000;
+
+  if (initialResponse && offset >= Number(initialResponse.count || 0)) {
+    return allItems;
+  }
 
   for (let page = 0; page < MAX_PAGES; page++) {
     let response: any = null;
@@ -900,12 +909,12 @@ export const getDocumentDownloadUrl = async (
   accessKey?: string
 ): Promise<string | null> => {
   const docsParam = accessKey ? `${ownerId}_${docId}_${accessKey}` : `${ownerId}_${docId}`;
-  const url = `https://api.vk.ru/method/docs.getById?access_token=${token}&docs=${encodeURIComponent(
+  const url = `https://api.vk.ru/method/docs.getById?docs=${encodeURIComponent(
     docsParam
   )}&v=${API_VERSION}`;
 
   try {
-    const data = await executeRequest<any>(url);
+    const data = await executeRequest<any>(url, token);
     const doc = data?.response?.[0];
     if (doc?.url) return doc.url;
     logWarn(`docs.getById returned no URL for ${docsParam}`, data?.error || "");
