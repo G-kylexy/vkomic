@@ -195,7 +195,7 @@ jobs:
 
     steps:
       # Tagged releases require a matching immutable mobile tag. Example:
-      # main tag v1.4.2 -> mobile tag mobile-v1.4.2.
+      # main tag v1.4.3 -> mobile tag mobile-v1.4.3.
       - name: Checkout pinned mobile source
         uses: actions/checkout@v4
         with:
@@ -376,13 +376,13 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           body: |
-            Corrections et durcissement de la version 1.4.2.
+            Corrections et durcissement de la version 1.4.3.
 
-            - Correction du packaging macOS : l'application est re-signée avant la reconstruction du DMG, puis le DMG final est vérifié. Le build Apple Silicon ne déclenche plus l'erreur « app endommagée » de Gatekeeper.
-            - Correction des téléchargements mobiles VK : User-Agent compatible, résolution des liens `vk.com/doc...` et synchronisation des documents joints avec les URLs signées.
-            - Nouvelle signature Android de release, sans clé de debug exposée, avec vérification automatique du certificat et de la version.
-            - L'authentification PC utilise désormais l'App ID VK renseigné par l'utilisateur au lieu d'un App ID tiers intégré.
-            - Les appels API utilisent les domaines `api.vk.ru` et `oauth.vk.ru` ainsi que la version API VK `5.199`.
+            - Migration desktop et Android vers les App ID officiels de Vkomic et VK ID OAuth 2.1.
+            - Utilisation du jeton dans l'en-tête `Authorization: Bearer` et suppression des permissions OAuth inutiles.
+            - Réduction des appels VK : plus de ping automatique, plus de boucle de préchargement et aucune répétition de la première page lors de la pagination.
+            - Les téléchargements réutilisent d'abord leur URL signée ; `docs.getById` n'est appelé qu'en cas d'expiration ou pour un lien VK non signé.
+            - Les synchronisations ne sont plus recommencées intégralement par un second mécanisme de retry.
 
             ⚠️ Android : la clé de signature a été renouvelée pour des raisons de sécurité. Une désinstallation puis réinstallation peut être nécessaire depuis une ancienne version.
 
