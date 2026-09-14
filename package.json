@@ -13,6 +13,8 @@
     "tauri": "tauri",
     "dev": "vite",
     "build": "vite build",
+    "catalog:test": "node scripts/generate-vk-catalog.mjs --self-test",
+    "catalog:generate": "node scripts/generate-vk-catalog.mjs",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

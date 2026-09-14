@@ -1,11 +1,16 @@
-name: Deploy VK ID callback
+name: Deploy VK ID callback and catalog
 
 on:
   push:
     branches: [main]
     paths:
       - "docs/vk-callback.html"
+      - "scripts/generate-vk-catalog.mjs"
+      - "package.json"
       - ".github/workflows/pages.yml"
+  schedule:
+    # One full refresh per week keeps the monthly VK API usage bounded.
+    - cron: "17 3 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +31,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Verify catalog parser
+        run: node scripts/generate-vk-catalog.mjs --self-test
+      - name: Generate VK catalog
+        env:
+          VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
+          VK_MAX_API_CALLS: "1800"
+        run: node scripts/generate-vk-catalog.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload callback page
