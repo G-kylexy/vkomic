@@ -159,8 +159,8 @@ const App: React.FC = () => {
     setVkAuthError("");
     try {
       const callback = parseVkCallback(rawUrl);
-      const pending = readPendingVkAuthorization();
-      if (!pending || callback.state !== pending.state) {
+      const pending = readPendingVkAuthorization(callback.state);
+      if (!pending) {
         throw new Error("La demande VK ID a expiré. Relance la connexion depuis les paramètres.");
       }
       const session = await tauriVk.exchangeAuthCode(
@@ -170,7 +170,7 @@ const App: React.FC = () => {
         pending.codeVerifier,
       );
       applyVkAuthSession(session);
-      clearPendingVkAuthorization();
+      clearPendingVkAuthorization(callback.state);
       setIsVkAuthPending(false);
       setActiveTab("settings");
     } catch (error) {

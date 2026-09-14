@@ -2,8 +2,37 @@ export const VK_WEB_CLIENT_ID = "54761285";
 export const VK_WEB_REDIRECT_URI = "https://g-kylexy.github.io/vkomic/vk-callback.html";
 export const VK_AUTHORIZATION_ENDPOINT = "https://id.vk.ru/authorize";
 
-const PENDING_STATE_KEY = "vk_oauth_state";
-const PENDING_VERIFIER_KEY = "vk_oauth_code_verifier";
+const PENDING_AUTHORIZATIONS_KEY = "vk_oauth_pending_authorizations";
+const LEGACY_PENDING_STATE_KEY = "vk_oauth_state";
+const LEGACY_PENDING_VERIFIER_KEY = "vk_oauth_code_verifier";
+const PENDING_AUTHORIZATION_TTL_MS = 10 * 60 * 1000;
+
+interface PendingVkAuthorization {
+  state: string;
+  codeVerifier: string;
+  createdAt: number;
+}
+
+const readPendingVkAuthorizations = (): PendingVkAuthorization[] => {
+  try {
+    const raw = localStorage.getItem(PENDING_AUTHORIZATIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    const cutoff = Date.now() - PENDING_AUTHORIZATION_TTL_MS;
+    return parsed.filter((item): item is PendingVkAuthorization =>
+      typeof item?.state === "string" &&
+      typeof item?.codeVerifier === "string" &&
+      typeof item?.createdAt === "number" &&
+      item.createdAt >= cutoff
+    );
+  } catch {
+    return [];
+  }
+};
+
+const savePendingVkAuthorizations = (items: PendingVkAuthorization[]): void => {
+  localStorage.setItem(PENDING_AUTHORIZATIONS_KEY, JSON.stringify(items.slice(-5)));
+};
 
 export interface VkAuthSession {
   accessToken: string;
@@ -26,8 +55,10 @@ export const createVkAuthorizationUrl = async (): Promise<string> => {
   const state = randomHex(24);
   const codeVerifier = randomHex(32);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier));
-  sessionStorage.setItem(PENDING_STATE_KEY, state);
-  sessionStorage.setItem(PENDING_VERIFIER_KEY, codeVerifier);
+  savePendingVkAuthorizations([
+    ...readPendingVkAuthorizations().filter((item) => item.state !== state),
+    { state, codeVerifier, createdAt: Date.now() },
+  ]);
 
   const params = new URLSearchParams({
     client_id: VK_WEB_CLIENT_ID,
@@ -40,15 +71,20 @@ export const createVkAuthorizationUrl = async (): Promise<string> => {
   return `${VK_AUTHORIZATION_ENDPOINT}?${params.toString()}`;
 };
 
-export const readPendingVkAuthorization = (): { state: string; codeVerifier: string } | null => {
-  const state = sessionStorage.getItem(PENDING_STATE_KEY);
-  const codeVerifier = sessionStorage.getItem(PENDING_VERIFIER_KEY);
-  return state && codeVerifier ? { state, codeVerifier } : null;
+export const readPendingVkAuthorization = (state: string): { state: string; codeVerifier: string } | null => {
+  const pending = readPendingVkAuthorizations();
+  savePendingVkAuthorizations(pending);
+  return pending.find((item) => item.state === state) || null;
 };
 
-export const clearPendingVkAuthorization = (): void => {
-  sessionStorage.removeItem(PENDING_STATE_KEY);
-  sessionStorage.removeItem(PENDING_VERIFIER_KEY);
+export const clearPendingVkAuthorization = (state?: string): void => {
+  if (state) {
+    savePendingVkAuthorizations(readPendingVkAuthorizations().filter((item) => item.state !== state));
+  } else {
+    localStorage.removeItem(PENDING_AUTHORIZATIONS_KEY);
+  }
+  sessionStorage.removeItem(LEGACY_PENDING_STATE_KEY);
+  sessionStorage.removeItem(LEGACY_PENDING_VERIFIER_KEY);
 };
 
 export const createVkState = (): string => randomHex(24);
