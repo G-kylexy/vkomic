@@ -121,7 +121,7 @@ const App: React.FC = () => {
 
   // --- CUSTOM HOOKS ---
   const update = useAppUpdate();
-  const downloads = useDownloads(downloadPath, vkToken);
+  const downloads = useDownloads(downloadPath);
   const connection = useVkConnection(vkToken);
 
   // --- HANDLERS ---

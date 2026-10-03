@@ -19,7 +19,11 @@ const getDownloadTarget = (download: DownloadItem, downloadPath: string) => {
 
     let directory = downloadPath;
     if (download.subFolder) {
-        const safeSubFolder = download.subFolder.replace(/[<>:"/\\|?*]+/g, "").trim();
+        // Folder titles come from the VK board: strip leading/trailing dots so ".."
+        // cannot escape the download folder.
+        const safeSubFolder = download.subFolder
+            .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "")
+            .replace(/^[\s.]+|[\s.]+$/g, "");
         if (safeSubFolder.length > 0) {
             const separator = downloadPath.includes("\\") ? "\\" : "/";
             const cleanPath = downloadPath.endsWith(separator) ? downloadPath.slice(0, -1) : downloadPath;
@@ -30,7 +34,7 @@ const getDownloadTarget = (download: DownloadItem, downloadPath: string) => {
     return { directory, fileName };
 };
 
-export const useDownloads = (downloadPath: string, vkToken?: string) => {
+export const useDownloads = (downloadPath: string) => {
     const [downloads, setDownloads] = useState<DownloadItem[]>([]);
     const [downloadsHydrated, setDownloadsHydrated] = useState(false);
     const downloadsRef = useRef(downloads);
@@ -188,7 +192,6 @@ export const useDownloads = (downloadPath: string, vkToken?: string) => {
                         target.directory,
                         target.fileName,
                         d.totalBytes,
-                        vkToken,
                     );
                 } catch {
                     enqueued.delete(d.id);

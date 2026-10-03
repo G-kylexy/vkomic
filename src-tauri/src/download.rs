@@ -19,6 +19,76 @@ const VKOMIC_USER_AGENT: &str = concat!(
     " (+https://github.com/G-kylexy/vkomic)"
 );
 
+// Anyone can post on the VK board: refuse types that run when opened, so an
+// attachment like "Tome 5.pdf" with ext "exe" cannot land in the library.
+#[rustfmt::skip]
+const BLOCKED_EXTENSIONS: &[&str] = &[
+    "app", "application", "appimage", "appref-ms", "apk", "bat", "cmd", "com", "command", "cpl",
+    "deb", "desktop", "dll", "dmg", "exe", "gadget", "hta", "inf", "jar", "js", "jse", "lnk",
+    "msc", "msi", "msp", "pif", "pkg", "ps1", "psm1", "reg", "rpm", "run", "scf", "scr", "sh",
+    "sys", "url", "vbe", "vbs", "wsf", "wsh",
+];
+
+/// Make a VK-supplied title safe to use as a file name inside the download folder.
+fn sanitize_file_name(file_name: &str) -> Result<String> {
+    let cleaned: String = file_name
+        .chars()
+        .map(|c| {
+            if c.is_control() || "<>:\"/\\|?*".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    // Windows drops trailing dots and spaces, which would turn "x.pdf.exe." into
+    // an executable; this also reduces "." and ".." to an empty name.
+    let cleaned = cleaned
+        .trim_end_matches(|c: char| c == '.' || c == ' ')
+        .trim_start();
+    if cleaned.is_empty() {
+        return Err(anyhow::anyhow!("Invalid file name"));
+    }
+
+    let extension = std::path::Path::new(cleaned)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase);
+    if extension.is_some_and(|ext| BLOCKED_EXTENSIONS.contains(&ext.as_str())) {
+        return Err(anyhow::anyhow!(
+            "Refusing to download executable file type: {cleaned}"
+        ));
+    }
+    Ok(cleaned.to_string())
+}
+
+/// Tag the file as coming from the internet (Mark of the Web), as browsers do,
+/// so SmartScreen and Office Protected View still apply when it is opened.
+#[cfg(target_os = "windows")]
+fn mark_as_downloaded(path: &std::path::Path) {
+    let mut stream = path.as_os_str().to_owned();
+    stream.push(":Zone.Identifier");
+    // Non-NTFS volumes (FAT32, exFAT, some shares) have no alternate streams.
+    let _ = std::fs::write(stream, "[ZoneTransfer]\r\nZoneId=3\r\n");
+}
+
+/// macOS equivalent: the quarantine attribute browsers set, checked by Gatekeeper.
+#[cfg(target_os = "macos")]
+fn mark_as_downloaded(path: &std::path::Path) {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or_default();
+    let _ = std::process::Command::new("xattr")
+        .args(["-w", "com.apple.quarantine"])
+        .arg(format!("0081;{timestamp:x};Vkomic;"))
+        .arg(path)
+        .status();
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn mark_as_downloaded(_path: &std::path::Path) {}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadTask {
     pub id: String,
@@ -26,7 +96,6 @@ pub struct DownloadTask {
     pub directory: String,
     pub file_name: String,
     pub expected_size: Option<u64>,
-    pub token: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -256,9 +325,21 @@ impl DownloadManager {
 
 async fn download_file_worker(
     app: AppHandle,
-    task: DownloadTask,
+    mut task: DownloadTask,
     cancel_rx: tokio::sync::watch::Receiver<bool>,
 ) -> Result<()> {
+    if !task.url.starts_with("https://") {
+        return Err(anyhow::anyhow!("Only HTTPS downloads are allowed"));
+    }
+    if std::path::Path::new(&task.directory)
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(anyhow::anyhow!("Invalid download directory"));
+    }
+    task.file_name = sanitize_file_name(&task.file_name)?;
+    let path = std::path::Path::new(&task.directory).join(&task.file_name);
+
     let client = reqwest::Client::builder()
         .user_agent(VKOMIC_USER_AGENT)
         .build()?;
@@ -275,7 +356,10 @@ async fn download_file_worker(
         )
         .await
         {
-            Ok(DownloadAttemptOutcome::Complete) => return Ok(()),
+            Ok(DownloadAttemptOutcome::Complete) => {
+                mark_as_downloaded(&path);
+                return Ok(());
+            }
             Ok(DownloadAttemptOutcome::MoreData) => continue,
             Err(error) if *cancel_rx.borrow() => return Err(error),
             Err(error) => {
@@ -313,14 +397,8 @@ async fn download_file_attempt(
 ) -> Result<DownloadAttemptOutcome> {
     println!("DEBUG: Worker processing task {}", task.id);
 
-    // Sanitization du nom de fichier pour Windows (remplace les caractères interdits par _)
-    let safe_file_name: String = task
-        .file_name
-        .chars()
-        .map(|c| if "<>:\"/\\|?*".contains(c) { '_' } else { c })
-        .collect();
-
-    let path = std::path::Path::new(&task.directory).join(&safe_file_name);
+    // The worker has already sanitized the file name.
+    let path = std::path::Path::new(&task.directory).join(&task.file_name);
     println!("DEBUG: Target file path: {:?}", path);
 
     // Ensure directory exists
@@ -582,10 +660,7 @@ fn parse_content_range_start(value: &str) -> Option<u64> {
 }
 
 pub async fn reset_partial_download(directory: &str, file_name: &str) -> Result<()> {
-    let safe_file_name: String = file_name
-        .chars()
-        .map(|c| if "<>:\"/\\\\|?*".contains(c) { '_' } else { c })
-        .collect();
+    let safe_file_name = sanitize_file_name(file_name)?;
     let path = std::path::Path::new(directory).join(&safe_file_name);
     if path.exists() {
         preserve_partial(&path, &safe_file_name, "reset").await?;
@@ -610,7 +685,20 @@ async fn preserve_partial(path: &std::path::Path, file_name: &str, reason: &str)
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_content_range_start, parse_content_range_total};
+    use super::{parse_content_range_start, parse_content_range_total, sanitize_file_name};
+
+    #[test]
+    fn sanitizes_file_names() {
+        assert_eq!(
+            sanitize_file_name("Astérix: T01/02.pdf").unwrap(),
+            "Astérix_ T01_02.pdf"
+        );
+        assert_eq!(sanitize_file_name("Tome 1.cbz. ").unwrap(), "Tome 1.cbz");
+        assert!(sanitize_file_name("..").is_err());
+        assert!(sanitize_file_name("Tome 5.pdf.exe").is_err());
+        assert!(sanitize_file_name("Tome 5.pdf.EXE.").is_err());
+        assert!(sanitize_file_name("lecture.HTA").is_err());
+    }
 
     #[test]
     fn parses_content_range_boundaries() {

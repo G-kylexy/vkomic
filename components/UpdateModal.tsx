@@ -1,14 +1,6 @@
 import React from "react";
 import { Download, X, Gift, ShieldCheck, Zap } from "lucide-react";
 
-// Simple HTML sanitization to prevent XSS attacks
-const sanitizeHtml = (html: string): string => {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/javascript:/gi, '')
-    .replace(/on\w+\s*=/gi, '');
-};
-
 interface UpdateModalProps {
   version: string;
   notes: string;
@@ -98,12 +90,11 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
 
           {/* Scrollable Notes */}
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar -mr-2 mb-4">
-          <div
-              className="prose prose-sm prose-invert max-w-none text-slate-400 text-sm leading-relaxed font-light [&>ul]:list-disc [&>ul]:pl-4 [&>li]:mb-1"
-              dangerouslySetInnerHTML={{
-                __html: sanitizeHtml(notes || "<p>Améliorations de la stabilité et corrections de bugs.</p>")
-              }}
-            />
+            {/* GitHub release notes are Markdown: render them as text, never as HTML,
+                since any script here would reach the Tauri commands. */}
+            <p className="whitespace-pre-line break-words text-slate-400 text-sm leading-relaxed font-light">
+              {notes || "Améliorations de la stabilité et corrections de bugs."}
+            </p>
           </div>
 
           {/* Footer Area */}
