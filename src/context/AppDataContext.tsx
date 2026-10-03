@@ -10,6 +10,7 @@ import * as NativeNotification from "../services/NativeNotification";
 import { nativeDownload } from "../services/NativeDownload";
 import { setupNotifications } from "../services/NotificationService";
 import { getT } from "../i18n";
+import { describeVkError } from "../services/vk-errors";
 import { DownloadItem, VkNode } from "../types";
 import { useVk } from "./VkContext";
 
@@ -147,6 +148,18 @@ const validateIosDownload = async (result: any, item: DownloadItem) => {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Anyone can post on the VK board: never save files that install or run when opened.
+const BLOCKED_EXTENSIONS = new Set([
+  "aab", "apk", "apks", "app", "bat", "cmd", "dmg", "exe", "hta", "ipa", "jar", "js", "lnk",
+  "msi", "scr", "sh", "vbs", "xapk",
+]);
+
+const isBlockedFileType = (node: { extension?: string; title: string }) => {
+  const extension = node.extension?.replace(/^\./, "").toLowerCase() ||
+    node.title.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase();
+  return !!extension && BLOCKED_EXTENSIONS.has(extension);
+};
 
 const safeFilename = (value: string) =>
   value
@@ -782,7 +795,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const syncRoot = async () => {
     if (!token) { setError(t.browser.errorNoToken); return; }
-    if (isTokenInvalid) { setError("Token invalide - Veuillez le mettre à jour dans les paramètres"); return; }
+    if (isTokenInvalid) { setError(t.browser.errorSessionExpired); return; }
     setIsSyncing(true);
     setError(null);
     try {
@@ -792,8 +805,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       setNavPath([]);
       setStatus((prev: any) => ({ ...prev, lastSync: Date.now() }));
       void InteractionManager.runAfterInteractions(() => prefetchRootStructure(merged));
-    } catch {
-      setError(t.browser.errorSync);
+    } catch (err) {
+      setError(describeVkError(err, t, t.browser.errorSync));
     } finally {
       setIsSyncing(false);
     }
@@ -801,7 +814,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const syncAll = async () => {
     if (!token) { setError(t.browser.errorNoToken); return; }
-    if (isTokenInvalid) { setError("Token invalide - Veuillez le mettre à jour dans les paramètres"); return; }
+    if (isTokenInvalid) { setError(t.browser.errorSessionExpired); return; }
     setIsSyncing(true);
     setError(null);
     try {
@@ -812,8 +825,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         setNavPath([]);
         await AsyncStorage.setItem(STORAGE_KEYS.hasFullSynced, "true");
       }
-    } catch {
-      setError(t.browser.errorSync);
+    } catch (err) {
+      setError(describeVkError(err, t, t.browser.errorSync));
     } finally {
       setIsSyncing(false);
     }
@@ -821,7 +834,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const refreshCurrent = async () => {
     if (!token) { setError(t.browser.errorNoToken); return; }
-    if (isTokenInvalid) { setError("Token invalide - Veuillez le mettre à jour dans les paramètres"); return; }
+    if (isTokenInvalid) { setError(t.browser.errorSessionExpired); return; }
     setIsSyncing(true);
     setError(null);
     try {
@@ -847,8 +860,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
           return next;
         });
       }
-    } catch {
-      setError(t.browser.errorSync);
+    } catch (err) {
+      setError(describeVkError(err, t, t.browser.errorSync));
     } finally {
       setIsSyncing(false);
     }
@@ -857,7 +870,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const openNode = async (node: VkNode) => {
     if (node.type === "file") return;
     if (!token) { setError(t.browser.errorNoToken); return; }
-    if (isTokenInvalid) { setError("Token invalide - Veuillez le mettre à jour dans les paramètres"); return; }
+    if (isTokenInvalid) { setError(t.browser.errorSessionExpired); return; }
     setError(null);
 
     const resolvePath = (nodes: VkNode[] | null, targetId: string, currentPath: VkNode[] = []): VkNode[] | null => {
@@ -901,8 +914,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         } else {
           setNavPath((prev) => [...prev, loaded]);
         }
-      } catch {
-        setError(t.browser.errorLoad);
+      } catch (err) {
+        setError(describeVkError(err, t, t.browser.errorLoad));
       } finally {
         setIsLoadingNode(false);
       }
@@ -1078,6 +1091,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const addDownload = async (node: VkNode) => {
     if (node.type !== "file" || !node.url) { setError(t.browser.errorNoUrl); return; }
+    if (isBlockedFileType(node)) { setError(t.downloads.errorBlockedType); return; }
     // Check if download folder is configured
     if (!downloadPath || downloadPath.trim() === "") {
       setError(t.downloads.errorNoFolder || "Configurez un dossier de téléchargement dans les paramètres");

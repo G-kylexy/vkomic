@@ -96,6 +96,7 @@ export type Translations = {
     actionRetry: string;
     clearList: string;
     errorNoFolder: string;
+    errorBlockedType: string;
   };
 
   browser: {
@@ -120,6 +121,11 @@ export type Translations = {
     errorSync: string;
     errorLoad: string;
     errorNoUrl: string;
+    errorSessionExpired: string;
+    errorRateLimited: string;
+    errorAccessDenied: string;
+    errorAccountBlocked: string;
+    errorAppNotApproved: string;
     results: string;
     setupStep1: string;
     setupStep2: string;
@@ -197,6 +203,7 @@ const translations: Record<Language, Translations> = {
       actionRetry: "Réessayer",
       clearList: "Vider la liste",
       errorNoFolder: "Configurez un dossier de téléchargement dans les paramètres",
+      errorBlockedType: "Type de fichier bloqué : il pourrait installer ou lancer un programme.",
     },
     settings: {
       connectionTitle: "Connexion VK",
@@ -243,10 +250,15 @@ const translations: Record<Language, Translations> = {
       searchEmptySubtitle: "Aucun contenu ne correspond à ta recherche.",
       searchIndexHint: "Index partiel : lance « Tout synchroniser » pour une recherche complète.",
       loading: "Chargement…",
-      errorNoToken: "Configure un token VK dans Paramètres.",
+      errorNoToken: "Connecte-toi avec VK ID dans Paramètres.",
       errorSync: "Impossible de synchroniser (VK API).",
       errorLoad: "Impossible de charger le contenu.",
       errorNoUrl: "Ce fichier n'a pas d'URL de téléchargement.",
+      errorSessionExpired: "Ta session VK a expiré. Reconnecte-toi avec VK ID dans Paramètres.",
+      errorRateLimited: "VK limite temporairement les requêtes. Réessaie dans quelques minutes.",
+      errorAccessDenied: "VK refuse l'accès à ce contenu pour ce compte.",
+      errorAccountBlocked: "Ce compte VK a été bloqué ou supprimé par VK.",
+      errorAppNotApproved: "VK n'autorise pas encore cette fonction pour l'application Vkomic.",
       results: "résultat(s)",
       setupStep1: "1. Allez dans les Paramètres",
       setupStep2: "2. Cliquez sur le bouton d'obtention de token",
@@ -322,6 +334,7 @@ const translations: Record<Language, Translations> = {
       actionRetry: "Retry",
       clearList: "Clear list",
       errorNoFolder: "Configure a download folder in settings",
+      errorBlockedType: "Blocked file type: it could install or run a program.",
     },
     settings: {
       connectionTitle: "VK connection",
@@ -368,10 +381,15 @@ const translations: Record<Language, Translations> = {
       searchEmptySubtitle: "No content matches your search.",
       searchIndexHint: "Partial index: run “Sync all” for complete search.",
       loading: "Loading…",
-      errorNoToken: "Set a VK token in Settings.",
+      errorNoToken: "Sign in with VK ID in Settings.",
       errorSync: "Sync failed (VK API).",
       errorLoad: "Unable to load content.",
       errorNoUrl: "This file has no download URL.",
+      errorSessionExpired: "Your VK session has expired. Sign in again with VK ID in Settings.",
+      errorRateLimited: "VK is temporarily limiting requests. Try again in a few minutes.",
+      errorAccessDenied: "VK denies this account access to this content.",
+      errorAccountBlocked: "This VK account has been blocked or deleted by VK.",
+      errorAppNotApproved: "VK does not allow this feature for the Vkomic app yet.",
       results: "results",
       setupStep1: "1. Go to Settings",
       setupStep2: "2. Click on the get token button",
@@ -447,6 +465,7 @@ const translations: Record<Language, Translations> = {
       actionRetry: "Повторить",
       clearList: "Очистить список",
       errorNoFolder: "Настройте папку загрузок в настройках",
+      errorBlockedType: "Этот тип файла заблокирован: он может установить или запустить программу.",
     },
     settings: {
       connectionTitle: "Подключение VK",
@@ -493,10 +512,15 @@ const translations: Record<Language, Translations> = {
       searchEmptySubtitle: "По вашему запросу ничего не найдено.",
       searchIndexHint: "Индекс частичный: запусти «Полную синхронизацию» для полного поиска.",
       loading: "Загрузка…",
-      errorNoToken: "Укажите токен VK в настройках.",
+      errorNoToken: "Войдите через VK ID в настройках.",
       errorSync: "Не удалось синхронизировать (VK API).",
       errorLoad: "Не удалось загрузить содержимое.",
       errorNoUrl: "У этого файла нет URL для скачивания.",
+      errorSessionExpired: "Сессия VK истекла. Войдите снова через VK ID в настройках.",
+      errorRateLimited: "VK временно ограничивает запросы. Повторите через несколько минут.",
+      errorAccessDenied: "VK запрещает этому аккаунту доступ к этому контенту.",
+      errorAccountBlocked: "Этот аккаунт VK заблокирован или удалён.",
+      errorAppNotApproved: "VK пока не разрешает эту функцию для приложения Vkomic.",
       results: "результат(ов)",
       setupStep1: "1. Перейдите в настройки",
       setupStep2: "2. Нажмите кнопку получения токена",
