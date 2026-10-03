@@ -9,7 +9,11 @@ use tokio::sync::Mutex;
 
 const VK_API_MIN_INTERVAL: Duration = Duration::from_millis(500);
 const VK_API_RETRY_BACKOFF: Duration = Duration::from_millis(1_500);
-const VKOMIC_USER_AGENT: &str = "Vkomic/1.4.2 (+https://github.com/G-kylexy/vkomic)";
+const VKOMIC_USER_AGENT: &str = concat!(
+    "Vkomic/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/G-kylexy/vkomic)"
+);
 
 static VK_API_LAST_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 

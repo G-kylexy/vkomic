@@ -11,9 +11,10 @@ on:
   workflow_dispatch:
     inputs:
       refresh_catalog:
-        description: "Regenerate the VK catalog before deployment"
+        # Off by default: the service token gets VK API error 1051 until VK approves the app.
+        description: "Regenerate the VK catalog before deployment (requires VK approval)"
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:

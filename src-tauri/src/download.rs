@@ -13,7 +13,11 @@ const MAX_ACTIVE_DOWNLOADS: usize = 2;
 const MAX_DOWNLOAD_ATTEMPTS: usize = 5;
 const FALLBACK_AFTER_FAILURES: usize = 2;
 const FALLBACK_CHUNK_SIZE: u64 = 32 * 1024 * 1024;
-const VKOMIC_USER_AGENT: &str = "Vkomic/1.4.2 (+https://github.com/G-kylexy/vkomic)";
+const VKOMIC_USER_AGENT: &str = concat!(
+    "Vkomic/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/G-kylexy/vkomic)"
+);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadTask {

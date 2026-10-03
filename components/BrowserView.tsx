@@ -30,6 +30,7 @@ import {
 } from "../lib/tauri";
 import { normalizeText } from "../utils/text";
 import { LIMITS } from "../utils/constants";
+import { describeVkError } from "../utils/vkErrors";
 
 const getDisplayTitle = (node: VkNode, language: string) => {
   let title = node.title;
@@ -487,7 +488,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
 
   const handleSync = async () => {
     if (!vkToken) {
-      setError("Veuillez configurer un Token VK dans les paramètres.");
+      setError(t.errors.vkNotConnected);
       onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
       return;
     }
@@ -506,7 +507,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
       });
     } catch (err) {
       console.error(err);
-      setError("Erreur lors de la connexion à VK. Vérifiez votre token.");
+      setError(describeVkError(err, t));
       onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
     } finally {
       setIsLoading(false);
@@ -515,7 +516,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
 
   const handleFullSync = async () => {
     if (!vkToken) {
-      setError("Veuillez configurer un Token VK dans les paramètres.");
+      setError(t.errors.vkNotConnected);
       onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
       return;
     }
@@ -541,7 +542,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
       });
     } catch (err) {
       console.error(err);
-      setError("Erreur lors de la connexion à VK. Vérifiez votre token.");
+      setError(describeVkError(err, t));
       onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
     } finally {
       setIsLoading(false);
@@ -631,7 +632,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
           }
         } catch (err) {
           console.error(err);
-          setError("Impossible de charger le contenu.");
+          setError(describeVkError(err, t));
         } finally {
           setIsLoading(false);
         }
@@ -643,7 +644,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
         }
       }
     },
-    [addDownload, isSearching, setSearchQuery, syncedData, setSyncedData, vkToken],
+    [addDownload, isSearching, setSearchQuery, syncedData, setSyncedData, vkToken, t],
   );
 
   const navigateUp = React.useCallback((index?: number) => {

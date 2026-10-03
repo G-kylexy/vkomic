@@ -103,8 +103,9 @@ export const fetchNodeContent = async (token: string, node: VkNode): Promise<VkN
         const result = await tauriVk.fetchNodeContent(token, node.vkGroupId, node.vkTopicId);
         return { ...result, title: node.title };
     } catch (error) {
+        // Rethrow so the caller shows the error without caching a broken node.
         console.error("VK API Error (Node):", error);
-        return { ...node, isLoaded: true, children: [{ id: "err1", title: "Erreur (API)", type: "category", isLoaded: true }] };
+        throw error;
     }
 };
 

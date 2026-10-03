@@ -125,6 +125,17 @@ export const en: Translations = {
     statusPaused: "Paused",
   },
 
+  // VK errors
+  errors: {
+    vkNotConnected: "Sign in with VK ID in Settings to sync.",
+    vkSessionExpired: "Your VK session has expired. Sign in again with VK ID in Settings.",
+    vkRateLimited: "VK is temporarily limiting requests. Try again in a few minutes.",
+    vkAccessDenied: "VK denies this account access to this content.",
+    vkAccountBlocked: "This VK account has been blocked or deleted by VK.",
+    vkAppNotApproved: "VK does not allow this feature for the Vkomic app yet.",
+    vkUnavailable: "Unable to reach VK. Check your connection and try again.",
+  },
+
   // Tooltips
   tooltips: {
     home: "Home",

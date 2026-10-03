@@ -69,7 +69,7 @@ export const fr = {
   library: {
     empty: "Bibliothèque vide",
     emptyDescription:
-      "Veuillez configurer votre token dans les Paramètres, puis synchronisez l'application avec l’index VK pour accéder aux BDs.",
+      "Connectez-vous avec VK ID dans les Paramètres, puis synchronisez l'application avec l’index VK pour accéder aux BDs.",
     syncButton: "Synchroniser depuis VK",
     syncAllButton: "Tout synchroniser",
     syncAllWarning:
@@ -123,6 +123,17 @@ export const fr = {
     statusDownloading: "Téléchargement...",
     statusPending: "En attente",
     statusPaused: "Pause",
+  },
+
+  // VK errors
+  errors: {
+    vkNotConnected: "Connectez-vous avec VK ID dans les Paramètres pour synchroniser.",
+    vkSessionExpired: "Votre session VK a expiré. Reconnectez-vous avec VK ID dans les Paramètres.",
+    vkRateLimited: "VK limite temporairement les requêtes. Réessayez dans quelques minutes.",
+    vkAccessDenied: "VK refuse l'accès à ce contenu pour ce compte.",
+    vkAccountBlocked: "Ce compte VK a été bloqué ou supprimé par VK.",
+    vkAppNotApproved: "VK n'autorise pas encore cette fonction pour l'application Vkomic.",
+    vkUnavailable: "Impossible de contacter VK. Vérifiez votre connexion puis réessayez.",
   },
 
   // Tooltips
