@@ -20,6 +20,8 @@ export const en: Translations = {
     disconnected: "Disconnected",
     lastSync: "Last synchronization",
     connectedToVK: "Connected to VK",
+    signedIn: "Signed in with VK ID",
+    syncFailed: "Sync failed",
     checkingUpdates: "Checking index...",
     syncDone: "Index up to date",
   },
@@ -123,6 +125,17 @@ export const en: Translations = {
     statusDownloading: "Downloading...",
     statusPending: "Pending",
     statusPaused: "Paused",
+  },
+
+  // VK errors
+  errors: {
+    vkNotConnected: "Sign in with VK ID in Settings to sync.",
+    vkSessionExpired: "Your VK session has expired. Sign in again with VK ID in Settings.",
+    vkRateLimited: "VK is temporarily limiting requests. Try again in a few minutes.",
+    vkAccessDenied: "VK denies this account access to this content.",
+    vkAccountBlocked: "This VK account has been blocked or deleted by VK.",
+    vkAppNotApproved: "VK does not allow this feature for the Vkomic app yet.",
+    vkUnavailable: "Unable to reach VK. Check your connection and try again.",
   },
 
   // Tooltips

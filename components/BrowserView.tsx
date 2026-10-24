@@ -30,6 +30,7 @@ import {
 } from "../lib/tauri";
 import { normalizeText } from "../utils/text";
 import { LIMITS } from "../utils/constants";
+import { describeVkError } from "../utils/vkErrors";
 
 const getDisplayTitle = (node: VkNode, language: string) => {
   let title = node.title;
@@ -349,7 +350,7 @@ interface BrowserViewProps {
   setHasFullSynced: (hasSynced: boolean) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  onVkStatusChange: (status: VkConnectionStatus) => void;
+  onVkStatusChange: React.Dispatch<React.SetStateAction<VkConnectionStatus>>;
   addDownload: (node: VkNode, subFolder?: string) => void;
   downloads: DownloadItem[];
   pauseDownload: (id: string) => void;
@@ -485,10 +486,23 @@ const BrowserView: React.FC<BrowserViewProps> = ({
 
   const hasActiveDownloads = activeDownloadsInView.length > 0;
 
+  const reportSyncSuccess = (latencyMs: number) =>
+    onVkStatusChange((prev) => ({
+      ...prev,
+      connected: true,
+      latencyMs,
+      lastSync: new Date().toISOString(),
+      error: null,
+    }));
+
+  // Keep the last successful sync date: a failed attempt must not erase it.
+  const reportSyncFailure = (error: string | null) =>
+    onVkStatusChange((prev) => ({ ...prev, connected: false, latencyMs: null, error }));
+
   const handleSync = async () => {
     if (!vkToken) {
-      setError("Veuillez configurer un Token VK dans les paramètres.");
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      setError(t.errors.vkNotConnected);
+      reportSyncFailure(null);
       return;
     }
     setError(null);
@@ -498,16 +512,12 @@ const BrowserView: React.FC<BrowserViewProps> = ({
       const start = performance.now();
       const data = await fetchRootIndex(vkToken, vkGroupId, vkTopicId);
       setSyncedData(data);
-      const latency = Math.round(performance.now() - start);
-      onVkStatusChange({
-        connected: true,
-        latencyMs: latency,
-        lastSync: new Date().toISOString(),
-      });
+      reportSyncSuccess(Math.round(performance.now() - start));
     } catch (err) {
       console.error(err);
-      setError("Erreur lors de la connexion à VK. Vérifiez votre token.");
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      const message = describeVkError(err, t);
+      setError(message);
+      reportSyncFailure(message);
     } finally {
       setIsLoading(false);
     }
@@ -515,8 +525,8 @@ const BrowserView: React.FC<BrowserViewProps> = ({
 
   const handleFullSync = async () => {
     if (!vkToken) {
-      setError("Veuillez configurer un Token VK dans les paramètres.");
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      setError(t.errors.vkNotConnected);
+      reportSyncFailure(null);
       return;
     }
     setError(null);
@@ -533,16 +543,12 @@ const BrowserView: React.FC<BrowserViewProps> = ({
       );
       setSyncedData(data);
       setHasFullSynced(true); // Mark as fully synced
-      const latency = Math.round(performance.now() - start);
-      onVkStatusChange({
-        connected: true,
-        latencyMs: latency,
-        lastSync: new Date().toISOString(),
-      });
+      reportSyncSuccess(Math.round(performance.now() - start));
     } catch (err) {
       console.error(err);
-      setError("Erreur lors de la connexion à VK. Vérifiez votre token.");
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      const message = describeVkError(err, t);
+      setError(message);
+      reportSyncFailure(message);
     } finally {
       setIsLoading(false);
     }
@@ -631,7 +637,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
           }
         } catch (err) {
           console.error(err);
-          setError("Impossible de charger le contenu.");
+          setError(describeVkError(err, t));
         } finally {
           setIsLoading(false);
         }
@@ -643,7 +649,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
         }
       }
     },
-    [addDownload, isSearching, setSearchQuery, syncedData, setSyncedData, vkToken],
+    [addDownload, isSearching, setSearchQuery, syncedData, setSyncedData, vkToken, t],
   );
 
   const navigateUp = React.useCallback((index?: number) => {

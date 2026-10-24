@@ -29,8 +29,8 @@ export const tauriFs = {
     listDirectory: (path: string) => invoke<any>("fs_list_directory", { path }),
     openPath: (path: string) => invoke<void>("fs_open_path", { path }),
     revealPath: (path: string) => invoke<void>("fs_reveal_path", { path }),
-    queueDownload: (id: string, url: string, directory: string, fileName: string, expectedSize?: number, token?: string) =>
-        invoke<void>("fs_queue_download", { id, url, directory, fileName, expectedSize, token }),
+    queueDownload: (id: string, url: string, directory: string, fileName: string, expectedSize?: number) =>
+        invoke<void>("fs_queue_download", { id, url, directory, fileName, expectedSize }),
     cancelDownload: (id: string) => invoke<boolean>("fs_cancel_download", { id }),
     resetDownload: (id: string, directory: string, fileName: string) =>
         invoke<void>("fs_reset_download", { id, directory, fileName }),
@@ -103,8 +103,9 @@ export const fetchNodeContent = async (token: string, node: VkNode): Promise<VkN
         const result = await tauriVk.fetchNodeContent(token, node.vkGroupId, node.vkTopicId);
         return { ...result, title: node.title };
     } catch (error) {
+        // Rethrow so the caller shows the error without caching a broken node.
         console.error("VK API Error (Node):", error);
-        return { ...node, isLoaded: true, children: [{ id: "err1", title: "Erreur (API)", type: "category", isLoaded: true }] };
+        throw error;
     }
 };
 

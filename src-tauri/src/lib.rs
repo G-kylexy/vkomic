@@ -113,7 +113,6 @@ async fn fs_queue_download(
     directory: String,
     file_name: String,
     expected_size: Option<u64>,
-    token: Option<String>,
 ) -> Result<(), String> {
     let task = DownloadTask {
         id,
@@ -121,7 +120,6 @@ async fn fs_queue_download(
         directory,
         file_name,
         expected_size,
-        token,
     };
     state.download_manager.add_task(app, task).await;
     Ok(())

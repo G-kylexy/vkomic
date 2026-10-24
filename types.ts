@@ -34,6 +34,8 @@ export interface VkConnectionStatus {
   connected: boolean;
   latencyMs: number | null;
   lastSync: string | null;
+  /** Translated reason of the last failed sync, if any. */
+  error?: string | null;
   region?: string | null;
   regionAggregate?: string | null;
 }

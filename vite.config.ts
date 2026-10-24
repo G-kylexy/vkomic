@@ -17,7 +17,8 @@ export default defineConfig(({ mode }) => {
     base: "./",
     server: {
       port: 3000,
-      host: "0.0.0.0",
+      // Local only; `tauri android dev` sets TAURI_DEV_HOST when a device needs network access.
+      host: process.env.TAURI_DEV_HOST || false,
       strictPort: true,
     },
     build: {

@@ -23,6 +23,10 @@ import {
 
 const UpdateModal = React.lazy(() => import("./components/UpdateModal"));
 
+// Delay before retrying a failed VK ID refresh, so a rejected refresh token
+// does not hammer VK ID in a tight loop.
+const VK_REFRESH_RETRY_MS = 5 * 60_000;
+
 const App: React.FC = () => {
   // --- STATE ---
   const [activeTab, setActiveTab] = useState("home");
@@ -117,7 +121,7 @@ const App: React.FC = () => {
 
   // --- CUSTOM HOOKS ---
   const update = useAppUpdate();
-  const downloads = useDownloads(downloadPath, vkToken);
+  const downloads = useDownloads(downloadPath);
   const connection = useVkConnection(vkToken);
 
   // --- HANDLERS ---
@@ -214,7 +218,8 @@ const App: React.FC = () => {
         .then(applyVkAuthSession)
         .catch((error) => {
           setVkToken("");
-          setVkTokenExpiresAt(Date.now() + 60_000);
+          // The effect refreshes 60 s before expiry; offset so the retry waits the full delay.
+          setVkTokenExpiresAt(Date.now() + VK_REFRESH_RETRY_MS + 60_000);
           setVkAuthError(error instanceof Error ? error.message : String(error));
         })
         .finally(() => setIsVkAuthExchanging(false));
@@ -293,6 +298,7 @@ const App: React.FC = () => {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           vkStatus={connection.vkStatus}
+          isVkSignedIn={Boolean(vkToken)}
           isCheckingUpdates={false}
           activeDownloadsCount={downloads.downloads.filter(d => ["pending", "downloading"].includes(d.status)).length}
         />
