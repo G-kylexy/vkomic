@@ -34,6 +34,8 @@ interface SidebarProps {
   setActiveTab: (id: string) => void;
   vkStatus: VkConnectionStatus;
   isVkSignedIn: boolean;
+  availableUpdateVersion?: string | null;
+  onShowUpdate?: () => void;
   isCheckingUpdates: boolean;
   activeDownloadsCount?: number;
 }
@@ -55,6 +57,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   vkStatus,
   isVkSignedIn,
+  availableUpdateVersion = null,
+  onShowUpdate,
   isCheckingUpdates,
   activeDownloadsCount = 0,
 }) => {
@@ -210,6 +214,19 @@ const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </div>
 
+          {/* Update available: stays after "Later" so the update is one click away */}
+          {availableUpdateVersion && onShowUpdate && (
+            <button
+              type="button"
+              onClick={onShowUpdate}
+              className="mt-3 w-full flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-1.5 text-left text-[11px] font-semibold text-blue-300 hover:bg-blue-500/20 transition-colors"
+            >
+              <Download size={12} className="flex-shrink-0" />
+              <span className="truncate">{t.sidebar.updateAvailable}</span>
+              <span className="ml-auto font-mono text-[10px] text-blue-400/80">v{availableUpdateVersion}</span>
+            </button>
+          )}
+
           {/* App version */}
           {appVersion && (
             <div className="mt-3 pt-3 border-t border-slate-800/50">
@@ -222,7 +239,17 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Minimal status indicator for small screens */}
-      <div className="pb-4 lg:hidden flex justify-center">
+      <div className="pb-4 lg:hidden flex flex-col items-center gap-3">
+        {availableUpdateVersion && onShowUpdate && (
+          <button
+            type="button"
+            onClick={onShowUpdate}
+            title={`${t.sidebar.updateAvailable} (v${availableUpdateVersion})`}
+            className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 hover:bg-blue-500/20 transition-colors"
+          >
+            <Download size={14} />
+          </button>
+        )}
         <span className="relative flex h-3 w-3" title={vkStatus.error || statusLabel}>
           <span className={`relative inline-flex rounded-full h-3 w-3 ${STATUS_DOT_CLASS[statusTone]}`} />
         </span>

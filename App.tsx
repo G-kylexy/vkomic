@@ -299,6 +299,8 @@ const App: React.FC = () => {
           setActiveTab={setActiveTab}
           vkStatus={connection.vkStatus}
           isVkSignedIn={Boolean(vkToken)}
+          availableUpdateVersion={update.updateInfo?.version ?? null}
+          onShowUpdate={update.showUpdate}
           isCheckingUpdates={false}
           activeDownloadsCount={downloads.downloads.filter(d => ["pending", "downloading"].includes(d.status)).length}
         />
@@ -344,7 +346,7 @@ const App: React.FC = () => {
             />
           </div>
 
-          {update.updateInfo && (
+          {update.updateInfo && update.isUpdateModalOpen && (
             <Suspense fallback={null}>
               <UpdateModal
                 version={update.updateInfo.version}
