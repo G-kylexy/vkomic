@@ -29,6 +29,8 @@ ios/
 # Temp
 .claude/
 tmp/
+output/
+.playwright-cli/
 *.tmp
 build_output*.txt
 build_tail*.txt

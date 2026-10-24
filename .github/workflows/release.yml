@@ -195,7 +195,7 @@ jobs:
 
     steps:
       # Tagged releases require a matching immutable mobile tag. Example:
-      # main tag v1.4.3 -> mobile tag mobile-v1.4.3.
+      # main tag v1.4.4 -> mobile tag mobile-v1.4.4.
       - name: Checkout pinned mobile source
         uses: actions/checkout@v4
         with:
@@ -376,17 +376,37 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           body: |
-            Corrections et durcissement de la version 1.4.3.
+            Vkomic 1.4.4 : la synchronisation VK est de retour.
 
-            - Migration desktop et Android vers les App ID officiels de Vkomic et VK ID OAuth 2.1.
-            - Utilisation du jeton dans l'en-tête `Authorization: Bearer` et suppression des permissions OAuth inutiles.
-            - Réduction des appels VK : plus de ping automatique, plus de boucle de préchargement et aucune répétition de la première page lors de la pagination.
-            - Les téléchargements réutilisent d'abord leur URL signée ; `docs.getById` n'est appelé qu'en cas d'expiration ou pour un lien VK non signé.
-            - Les synchronisations ne sont plus recommencées intégralement par un second mécanisme de retry.
+            Cette version remplace la 1.4.3, qui n'a jamais été publiée, et regroupe toutes les corrections depuis la 1.4.2.
 
-            ⚠️ Android : la clé de signature a été renouvelée pour des raisons de sécurité. Une désinstallation puis réinstallation peut être nécessaire depuis une ancienne version.
+            Connexion VK
+            - Connexion avec VK ID : dans Paramètres, cliquez sur « Continuer avec VK ID ». Plus besoin de créer une application VK ni de copier un jeton (#50).
+            - Synchronisation et téléchargements rétablis sur PC : VK a validé l'accès de Vkomic (#44, #49).
+            - Le voyant de connexion dit enfin la vérité : vert quand VK répond (vérifié au lancement), jaune quand vous êtes connecté mais pas encore vérifié, rouge avec la raison exacte quand une synchronisation échoue. La date de dernière synchronisation n'est plus effacée après un échec.
+            - Les erreurs VK s'affichent en clair (session expirée, trop de requêtes, compte bloqué, accès refusé par VK…) au lieu de « vérifiez votre jeton ».
+            - Le renouvellement de session ne tourne plus en boucle en cas d'échec : nouvel essai après 5 minutes.
 
-            Fixes #40
+            Téléchargements
+            - Reprise plus fiable des gros fichiers : deux essais en flux normal, puis reprise par morceaux de 32 Mo.
+            - Nouveau bouton pour repartir de zéro sur un téléchargement, en gardant une copie du fichier partiel.
+            - Les liens de téléchargement signés sont réutilisés ; VK n'est recontacté que s'ils ont expiré.
+            - Moins d'appels à VK pour rester dans les quotas.
+
+            Sécurité
+            - Les pièces jointes exécutables ou installables (.exe, .msi, .apk, .dmg, scripts…) sont refusées avant téléchargement.
+            - Téléchargements en HTTPS uniquement, noms de dossiers contrôlés, fichiers marqués comme venant d'Internet (Windows et macOS).
+            - Jetons VK rangés dans le Gestionnaire d'identifiants Windows ; fichier de réglages réservé à l'utilisateur sur macOS et Linux.
+            - Politique de sécurité du contenu activée et notes de mise à jour affichées en texte brut.
+            - Dépendances mises à jour, dont la bibliothèque TLS (rustls) et les certificats racines.
+
+            Linux
+            - AppImage : correction du plantage EGL_BAD_ALLOC sous Wayland / Mesa récent. Paquets .deb et .rpm disponibles en plus (#43).
+
+            Android
+            - Connexion avec VK ID et messages d'erreur VK compréhensibles.
+            - Les pièces jointes exécutables (.apk, .exe…) sont refusées.
+            - Si VK n'a pas encore validé l'application Android, Vkomic l'indique clairement au lieu d'échouer sans explication.
           files: final_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
