@@ -195,7 +195,7 @@ jobs:
 
     steps:
       # Tagged releases require a matching immutable mobile tag. Example:
-      # main tag v1.4.4 -> mobile tag mobile-v1.4.4.
+      # main tag v1.5.0 -> mobile tag mobile-v1.5.0.
       - name: Checkout pinned mobile source
         uses: actions/checkout@v4
         with:
@@ -380,7 +380,7 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           body: |
-            Vkomic 1.4.4 : la synchronisation VK est de retour.
+            Vkomic 1.5 : la synchronisation VK est de retour.
 
             Cette version remplace la 1.4.3, qui n'a jamais été publiée, et regroupe toutes les corrections depuis la 1.4.2.
 
