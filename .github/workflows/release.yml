@@ -231,6 +231,10 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The default also installs the legacy "tools" package, which the
+          # SDK repository no longer serves (sdkmanager exits with code 1).
+          packages: platform-tools
 
       - name: Install dependencies
         run: npm ci
