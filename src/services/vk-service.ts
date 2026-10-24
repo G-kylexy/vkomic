@@ -83,8 +83,21 @@ export const fetchVkTopic = async (
   offset: number = 0
 ): Promise<any> => {
   if (!token || token.length < 10) throw new Error("Invalid Token");
-  const url = `https://api.vk.ru/method/board.getComments?group_id=${groupId}&topic_id=${topicId}&count=100&offset=${offset}&extended=1&v=${API_VERSION}`;
+  // No "extended": author profiles are never used, and inside execute a VK ID
+  // token gets error 7 for them, which used to discard the whole batch.
+  const url = `https://api.vk.ru/method/board.getComments?group_id=${groupId}&topic_id=${topicId}&count=100&offset=${offset}&v=${API_VERSION}`;
   return executeRequest(url, token);
+};
+
+const fetchTopicDirect = async (
+  token: string,
+  topic: { groupId: string; topicId: string }
+): Promise<any> => {
+  const data = await fetchVkTopic(token, topic.groupId, topic.topicId);
+  if (data.error || !data.response || !Array.isArray(data.response.items)) {
+    throw new Error(`VK board error: ${JSON.stringify(data.error || data)}`);
+  }
+  return data.response;
 };
 
 // Récupère les premiers commentaires de plusieurs topics en un seul appel execute
@@ -99,35 +112,42 @@ const fetchMultipleTopics = async (
   const calls = topics
     .map(
       (t) =>
-        `API.board.getComments({group_id:${t.groupId},topic_id:${t.topicId},count:100,extended:1})`
+        `API.board.getComments({group_id:${t.groupId},topic_id:${t.topicId},count:100})`
     )
     .join(",");
 
   const code = `return [${calls}];`;
   const url = `https://api.vk.ru/method/execute?v=${API_VERSION}&code=${encodeURIComponent(code)}`;
 
+  let data: any;
   try {
-    const data = await executeRequest<any>(url, token);
-    if (data.error || (Array.isArray(data.execute_errors) && data.execute_errors.length > 0)) {
-      throw new Error(`VK execute error: ${JSON.stringify(data.error || data.execute_errors)}`);
+    data = await executeRequest<any>(url, token);
+    if (data.error) {
+      throw new Error(`VK execute error: ${JSON.stringify(data.error)}`);
     }
     if (!Array.isArray(data.response) || data.response.length !== topics.length) {
       throw new Error("VK returned an incomplete multi-topic response");
     }
-    if (data.response.some((response: any) => !response || !Array.isArray(response.items))) {
-      throw new Error("VK returned an invalid multi-topic response");
-    }
-    return data.response;
   } catch (error) {
     logWarn("VK execute unavailable; using direct board calls.", error);
-    return Promise.all(topics.map(async (topic) => {
-      const data = await fetchVkTopic(token, topic.groupId, topic.topicId);
-      if (data.error || !data.response || !Array.isArray(data.response.items)) {
-        throw new Error(`VK board error: ${JSON.stringify(data.error || data)}`);
-      }
-      return data.response;
-    }));
+    return Promise.all(topics.map((topic) => fetchTopicDirect(token, topic)));
   }
+
+  if (Array.isArray(data.execute_errors) && data.execute_errors.length > 0) {
+    logWarn("VK execute partial errors; refetching only the failed topics.", data.execute_errors);
+  }
+  // A failed sub-call only leaves `false` in its own slot: refetch that topic alone.
+  // A topic VK still refuses stays unexpanded and loads on demand.
+  return Promise.all(
+    data.response.map((response: any, index: number) =>
+      response && Array.isArray(response.items)
+        ? response
+        : fetchTopicDirect(token, topics[index]).catch((error) => {
+            logWarn(`VK topic ${topics[index].topicId} unavailable.`, error);
+            return null;
+          })
+    )
+  );
 };
 
 /**
