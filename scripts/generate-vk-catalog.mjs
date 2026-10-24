@@ -8,12 +8,25 @@ const ROOT_TOPIC_ID = String(process.env.VK_TOPIC_ID || "47515406");
 const MAX_DEPTH = Number(process.env.VK_CATALOG_MAX_DEPTH || "6");
 const MAX_API_CALLS = Number(process.env.VK_MAX_API_CALLS || "1800");
 const OUTPUT_PATH = resolve(process.env.VK_CATALOG_OUTPUT || "docs/catalog-v1.json");
-const SERVICE_TOKEN = process.env.VK_SERVICE_TOKEN || "";
+const SERVICE_TOKEN = (process.env.VK_SERVICE_TOKEN || "").trim();
 const API_INTERVAL_MS = 400;
 
 let apiCalls = 0;
 let lastRequestAt = 0;
 const commentsCache = new Map();
+const unavailableTopics = [];
+
+class VkApiError extends Error {
+  constructor(code, method, params, message) {
+    const target = [
+      params.group_id ? `group=${params.group_id}` : "",
+      params.topic_id ? `topic=${params.topic_id}` : "",
+    ].filter(Boolean).join(", ");
+    super(`VK API ${code} on ${method}${target ? ` (${target})` : ""}: ${message}`);
+    this.name = "VkApiError";
+    this.code = code;
+  }
+}
 
 const sleep = (milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 
@@ -142,6 +155,9 @@ const waitForApiSlot = async () => {
 
 const vkRequest = async (method, params) => {
   if (!SERVICE_TOKEN) throw new Error("VK_SERVICE_TOKEN is missing");
+  if (!/^[\x21-\x7E]+$/u.test(SERVICE_TOKEN)) {
+    throw new Error("VK_SERVICE_TOKEN contains invalid characters; paste only the service key");
+  }
   if (apiCalls >= MAX_API_CALLS) {
     throw new Error(`Safety limit reached (${MAX_API_CALLS} VK API calls)`);
   }
@@ -183,7 +199,7 @@ const vkRequest = async (method, params) => {
       await sleep(1500 * (attempt + 1));
       continue;
     }
-    throw new Error(`VK API ${code}: ${payload.error.error_msg || "request rejected"}`);
+    throw new VkApiError(code, method, params, payload.error.error_msg || "request rejected");
   }
   throw new Error("VK API request failed");
 };
@@ -235,7 +251,21 @@ const expandTopicNode = async (node, depth, ancestors) => {
     return;
   }
 
-  const { items, count } = await fetchAllComments(node.vkGroupId, node.vkTopicId);
+  let comments;
+  try {
+    comments = await fetchAllComments(node.vkGroupId, node.vkTopicId);
+  } catch (error) {
+    if (!(error instanceof VkApiError) || ![15, 1051].includes(error.code)) throw error;
+    console.warn(`Skipping unavailable topic ${key}: ${error.message}`);
+    unavailableTopics.push({ groupId: node.vkGroupId, topicId: node.vkTopicId, code: error.code });
+    node.children = [];
+    node.isLoaded = false;
+    node.structureOnly = true;
+    node.unavailable = true;
+    return;
+  }
+
+  const { items, count } = comments;
   const fullText = items.map((item) => String(item.text || "")).join("\n");
   const topics = parseTopicBody(fullText, node.vkTopicId);
   const documents = extractDocuments(items);
@@ -268,6 +298,7 @@ const generateCatalog = async () => {
     generatedAt: new Date().toISOString(),
     source: { groupId: GROUP_ID, topicId: ROOT_TOPIC_ID },
     apiCalls,
+    unavailableTopics,
     items,
   };
 };
@@ -302,6 +333,9 @@ if (process.argv.includes("--self-test")) {
 } else {
   const catalog = await generateCatalog();
   if (!catalog.items.length) throw new Error("VK returned an empty catalog");
+  if (catalog.items.every((item) => item.unavailable)) {
+    throw new Error("VK refused every catalog topic; keeping the previous catalog");
+  }
   await mkdir(dirname(OUTPUT_PATH), { recursive: true });
   await writeFile(OUTPUT_PATH, `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
   console.log(`Catalog generated: ${catalog.items.length} roots, ${apiCalls} VK API calls`);
