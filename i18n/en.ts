@@ -22,6 +22,7 @@ export const en: Translations = {
     connectedToVK: "Connected to VK",
     signedIn: "Signed in with VK ID",
     syncFailed: "Sync failed",
+    updateAvailable: "Update available",
     checkingUpdates: "Checking index...",
     syncDone: "Index up to date",
   },

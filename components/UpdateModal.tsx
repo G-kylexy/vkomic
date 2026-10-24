@@ -38,7 +38,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   const getButtonLabel = () => {
     if (isReady) return "Redémarrer maintenant";
     if (isDownloading) return "Téléchargement en cours...";
-    return "Installer la mise à jour";
+    return "Télécharger la mise à jour";
   };
 
   return (

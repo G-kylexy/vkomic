@@ -41,8 +41,10 @@ fn board_get_comments_call(
         .map(|value| format!(", \"offset\":{}", value))
         .unwrap_or_default();
 
+    // No "extended": author profiles are never used, and inside execute a VK ID
+    // token gets error 7 for them, which used to discard the whole batch.
     format!(
-        "API.board.getComments({{\"group_id\":{}, \"topic_id\":{}, \"count\":{}, \"extended\":1{}}})",
+        "API.board.getComments({{\"group_id\":{}, \"topic_id\":{}, \"count\":{}{}}})",
         group_id, topic_id, count, offset_arg
     )
 }
@@ -140,7 +142,6 @@ impl VkApi {
             ("topic_id", topic_id),
             ("count", "100"),
             ("offset", offset.as_str()),
-            ("extended", "1"),
         ];
 
         let mut attempts = 0;
@@ -458,7 +459,25 @@ impl VkApi {
         let mut results = Vec::new();
         for (chunk_indices, code, topic_ids) in batch_requests {
             let res = match self.execute_with_retry(&code).await {
-                Ok(value) => value,
+                Ok(mut value) => {
+                    // A failed sub-call only leaves `false` in its own slot: refetch
+                    // that topic alone instead of replaying the whole batch.
+                    if let Some(slots) = value.get_mut("response").and_then(Value::as_array_mut) {
+                        for (slot, &idx) in slots.iter_mut().zip(&chunk_indices) {
+                            if slot.is_object() {
+                                continue;
+                            }
+                            let node = &nodes[idx];
+                            let group_id = node.vk_group_id.as_deref().unwrap_or_default();
+                            let topic_id = node.vk_topic_id.as_deref().unwrap_or_default();
+                            match self.fetch_comments_page(group_id, topic_id, 0).await {
+                                Ok(page) => *slot = page,
+                                Err(error) => info!("Topic {} unavailable: {}", topic_id, error),
+                            }
+                        }
+                    }
+                    value
+                }
                 Err(error) => {
                     info!(
                         "VK execute unavailable ({}); falling back to direct board calls",
@@ -628,10 +647,13 @@ impl VkApi {
                         }
                         if let Some(errors) = json.get("execute_errors").and_then(Value::as_array) {
                             if !errors.is_empty() {
-                                return Err(anyhow::anyhow!(
-                                    "VK execute error: {}",
-                                    format_vk_error(&Value::Array(errors.clone()))
-                                ));
+                                let errors = format_vk_error(&Value::Array(errors.clone()));
+                                // Partial failure: the other sub-calls still answered,
+                                // and callers handle the `false` slots themselves.
+                                if json.get("response").and_then(Value::as_array).is_none() {
+                                    return Err(anyhow::anyhow!("VK execute error: {}", errors));
+                                }
+                                info!("VK execute partial errors: {}", errors);
                             }
                         }
                         return Ok(json);

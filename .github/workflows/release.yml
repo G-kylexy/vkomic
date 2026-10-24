@@ -391,6 +391,15 @@ jobs:
             - Les erreurs VK s'affichent en clair (session expirée, trop de requêtes, compte bloqué, accès refusé par VK…) au lieu de « vérifiez votre jeton ».
             - Le renouvellement de session ne tourne plus en boucle en cas d'échec : nouvel essai après 5 minutes.
 
+            Synchronisation
+            - Synchronisation complète en quelques secondes : environ 4 s pour tout le catalogue, au lieu d'une trentaine. Vkomic ne demande plus à VK des informations inutiles qui faisaient rejouer les lectures groupées une par une.
+            - Un forum inaccessible ne ralentit plus les autres : seul celui-ci est relu, et il reste consultable à la demande.
+
+            Mises à jour
+            - La fenêtre de mise à jour n'apparaît plus qu'une fois par version, au lieu de revenir toutes les 30 minutes après « Plus tard ».
+            - Un badge « Mise à jour disponible » reste dans la barre latérale pour y revenir.
+            - Le bouton de la fenêtre indique clairement qu'il ouvre la page de téléchargement.
+
             Téléchargements
             - Reprise plus fiable des gros fichiers : deux essais en flux normal, puis reprise par morceaux de 32 Mo.
             - Nouveau bouton pour repartir de zéro sur un téléchargement, en gardant une copie du fichier partiel.
@@ -409,6 +418,7 @@ jobs:
 
             Android
             - Connexion avec VK ID et messages d'erreur VK compréhensibles.
+            - Synchronisation plus rapide, avec la même correction que sur PC.
             - Les pièces jointes exécutables (.apk, .exe…) sont refusées.
             - Si VK n'a pas encore validé l'application Android, Vkomic l'indique clairement au lieu d'échouer sans explication.
           files: final_assets/*

@@ -5,6 +5,24 @@ import { getVersion } from "@tauri-apps/api/app";
 
 const GITHUB_RELEASES_URL = "https://github.com/G-kylexy/vkomic/releases/latest";
 const GITHUB_API_URL = "https://api.github.com/repos/G-kylexy/vkomic/releases/latest";
+// Version déjà vue (« Plus tard » ou page ouverte) : la fenêtre ne revient pas pour elle.
+const ACKNOWLEDGED_VERSION_KEY = "vkomic_update_acknowledged_version";
+
+const readAcknowledgedVersion = (): string | null => {
+    try {
+        return localStorage.getItem(ACKNOWLEDGED_VERSION_KEY);
+    } catch {
+        return null;
+    }
+};
+
+const acknowledgeVersion = (version: string) => {
+    try {
+        localStorage.setItem(ACKNOWLEDGED_VERSION_KEY, version);
+    } catch {
+        // Stockage indisponible : la fenêtre réapparaîtra au prochain lancement, sans plus.
+    }
+};
 
 export interface UpdateInfo {
     version: string;
@@ -15,6 +33,7 @@ export interface UpdateInfo {
 
 export const useAppUpdate = () => {
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+    const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
     // Vérifier les mises à jour au démarrage
     useEffect(() => {
@@ -36,6 +55,10 @@ export const useAppUpdate = () => {
                         notes: release.body || "Nouvelle version disponible",
                         url: release.html_url || GITHUB_RELEASES_URL,
                     });
+                    // Une seule fenêtre par version ; ensuite seul le badge de la barre latérale reste.
+                    if (readAcknowledgedVersion() !== latestVersion) {
+                        setIsUpdateModalOpen(true);
+                    }
                 }
             } catch (error) {
                 console.error("Error checking for updates:", error);
@@ -52,13 +75,18 @@ export const useAppUpdate = () => {
     }, []);
 
     const openReleasePage = useCallback(async () => {
-        const url = updateInfo?.url || GITHUB_RELEASES_URL;
-        await tauriShell.openExternal(url);
-        setUpdateInfo(null);
+        if (updateInfo) acknowledgeVersion(updateInfo.version);
+        setIsUpdateModalOpen(false);
+        await tauriShell.openExternal(updateInfo?.url || GITHUB_RELEASES_URL);
     }, [updateInfo]);
 
     const dismissUpdate = useCallback(() => {
-        setUpdateInfo(null);
+        if (updateInfo) acknowledgeVersion(updateInfo.version);
+        setIsUpdateModalOpen(false);
+    }, [updateInfo]);
+
+    const showUpdate = useCallback(() => {
+        setIsUpdateModalOpen(true);
     }, []);
 
     const checkForUpdatesManual = useCallback(async () => {
@@ -100,8 +128,10 @@ export const useAppUpdate = () => {
 
     return {
         updateInfo,
+        isUpdateModalOpen,
         openReleasePage,
         dismissUpdate,
+        showUpdate,
         checkForUpdatesManual,
     };
 };
