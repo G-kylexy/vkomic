@@ -20,6 +20,8 @@ export const en: Translations = {
     disconnected: "Disconnected",
     lastSync: "Last synchronization",
     connectedToVK: "Connected to VK",
+    signedIn: "Signed in with VK ID",
+    syncFailed: "Sync failed",
     checkingUpdates: "Checking index...",
     syncDone: "Index up to date",
   },

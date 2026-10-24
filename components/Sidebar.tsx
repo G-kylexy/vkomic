@@ -33,18 +33,47 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (id: string) => void;
   vkStatus: VkConnectionStatus;
+  isVkSignedIn: boolean;
   isCheckingUpdates: boolean;
   activeDownloadsCount?: number;
 }
+
+const STATUS_DOT_CLASS = {
+  ok: "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]",
+  pending: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]",
+  error: "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]",
+};
+
+const STATUS_TEXT_CLASS = {
+  ok: "text-emerald-400",
+  pending: "text-amber-300",
+  error: "text-rose-400",
+};
 
 const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   vkStatus,
+  isVkSignedIn,
   isCheckingUpdates,
   activeDownloadsCount = 0,
 }) => {
   const { t, language } = useTranslation();
+
+  // Signed in with VK ID is not the same as VK answering: only a VK reply
+  // (launch check or sync) turns the status green, and a failed sync shows VK's reason.
+  const statusTone = vkStatus.connected
+    ? "ok"
+    : isVkSignedIn && !vkStatus.error
+      ? "pending"
+      : "error";
+  const statusLabel = vkStatus.connected
+    ? t.sidebar.connectedToVK
+    : vkStatus.error
+      ? t.sidebar.syncFailed
+      : isVkSignedIn
+        ? t.sidebar.signedIn
+        : t.sidebar.disconnected;
   const navItems: NavItem[] = [
     { id: "home", label: t.nav.home, icon: Globe },
     { id: "downloads", label: t.nav.downloads, icon: Download },
@@ -139,22 +168,21 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <div className="w-4 flex justify-center items-center flex-shrink-0">
               <span className="relative flex h-2 w-2">
-                {vkStatus.connected ? (
-                  <>
-                    <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-                  </>
-                ) : (
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+                {statusTone === "ok" && (
+                  <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
                 )}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${STATUS_DOT_CLASS[statusTone]}`} />
               </span>
             </div>
-            <span
-              className={`text-xs font-semibold ${vkStatus.connected ? "text-emerald-400" : "text-rose-400"}`}
-            >
-              {vkStatus.connected ? t.sidebar.connectedToVK : t.sidebar.disconnected}
+            <span className={`text-xs font-semibold ${STATUS_TEXT_CLASS[statusTone]}`}>
+              {statusLabel}
             </span>
           </div>
+          {vkStatus.error && !vkStatus.connected && (
+            <p className="-mt-2 mb-3 pl-6 text-[10px] leading-snug text-rose-300/80">
+              {vkStatus.error}
+            </p>
+          )}
 
           {/* Last sync / Status */}
           <div className="flex flex-col gap-0 mb-3">
@@ -195,8 +223,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Minimal status indicator for small screens */}
       <div className="pb-4 lg:hidden flex justify-center">
-        <span className="relative flex h-3 w-3">
-          <span className={`relative inline-flex rounded-full h-3 w-3 ${vkStatus.connected ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"}`} />
+        <span className="relative flex h-3 w-3" title={vkStatus.error || statusLabel}>
+          <span className={`relative inline-flex rounded-full h-3 w-3 ${STATUS_DOT_CLASS[statusTone]}`} />
         </span>
       </div>
     </div>

@@ -298,6 +298,7 @@ const App: React.FC = () => {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           vkStatus={connection.vkStatus}
+          isVkSignedIn={Boolean(vkToken)}
           isCheckingUpdates={false}
           activeDownloadsCount={downloads.downloads.filter(d => ["pending", "downloading"].includes(d.status)).length}
         />

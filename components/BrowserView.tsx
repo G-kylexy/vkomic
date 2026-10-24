@@ -350,7 +350,7 @@ interface BrowserViewProps {
   setHasFullSynced: (hasSynced: boolean) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  onVkStatusChange: (status: VkConnectionStatus) => void;
+  onVkStatusChange: React.Dispatch<React.SetStateAction<VkConnectionStatus>>;
   addDownload: (node: VkNode, subFolder?: string) => void;
   downloads: DownloadItem[];
   pauseDownload: (id: string) => void;
@@ -486,10 +486,23 @@ const BrowserView: React.FC<BrowserViewProps> = ({
 
   const hasActiveDownloads = activeDownloadsInView.length > 0;
 
+  const reportSyncSuccess = (latencyMs: number) =>
+    onVkStatusChange((prev) => ({
+      ...prev,
+      connected: true,
+      latencyMs,
+      lastSync: new Date().toISOString(),
+      error: null,
+    }));
+
+  // Keep the last successful sync date: a failed attempt must not erase it.
+  const reportSyncFailure = (error: string | null) =>
+    onVkStatusChange((prev) => ({ ...prev, connected: false, latencyMs: null, error }));
+
   const handleSync = async () => {
     if (!vkToken) {
       setError(t.errors.vkNotConnected);
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      reportSyncFailure(null);
       return;
     }
     setError(null);
@@ -499,16 +512,12 @@ const BrowserView: React.FC<BrowserViewProps> = ({
       const start = performance.now();
       const data = await fetchRootIndex(vkToken, vkGroupId, vkTopicId);
       setSyncedData(data);
-      const latency = Math.round(performance.now() - start);
-      onVkStatusChange({
-        connected: true,
-        latencyMs: latency,
-        lastSync: new Date().toISOString(),
-      });
+      reportSyncSuccess(Math.round(performance.now() - start));
     } catch (err) {
       console.error(err);
-      setError(describeVkError(err, t));
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      const message = describeVkError(err, t);
+      setError(message);
+      reportSyncFailure(message);
     } finally {
       setIsLoading(false);
     }
@@ -517,7 +526,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
   const handleFullSync = async () => {
     if (!vkToken) {
       setError(t.errors.vkNotConnected);
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      reportSyncFailure(null);
       return;
     }
     setError(null);
@@ -534,16 +543,12 @@ const BrowserView: React.FC<BrowserViewProps> = ({
       );
       setSyncedData(data);
       setHasFullSynced(true); // Mark as fully synced
-      const latency = Math.round(performance.now() - start);
-      onVkStatusChange({
-        connected: true,
-        latencyMs: latency,
-        lastSync: new Date().toISOString(),
-      });
+      reportSyncSuccess(Math.round(performance.now() - start));
     } catch (err) {
       console.error(err);
-      setError(describeVkError(err, t));
-      onVkStatusChange({ connected: false, latencyMs: null, lastSync: null });
+      const message = describeVkError(err, t);
+      setError(message);
+      reportSyncFailure(message);
     } finally {
       setIsLoading(false);
     }

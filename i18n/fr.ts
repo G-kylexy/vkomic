@@ -18,6 +18,8 @@ export const fr = {
     disconnected: "Déconnecté",
     lastSync: "Dernière synchronisation",
     connectedToVK: "Connecté à VK",
+    signedIn: "Connecté avec VK ID",
+    syncFailed: "Synchronisation impossible",
     checkingUpdates: "Vérification des index...",
     syncDone: "Index à jour",
   },
