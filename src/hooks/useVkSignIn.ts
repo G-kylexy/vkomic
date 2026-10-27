@@ -24,7 +24,13 @@ export const useVkSignIn = () => {
     setIsSigningIn(true);
     try {
       const request = await createVkAuthorizationRequest();
-      const result = await WebBrowser.openAuthSessionAsync(request.url, VK_ANDROID_REDIRECT_URI);
+      // When the VK app is installed, VK ID hands off to it and then asks the user to
+      // "return to the browser". Keep the tab in Vkomic's own task: by default it opens
+      // in a separate task hidden from recents, so returning meant reopening Vkomic,
+      // which cancels the session. Now reopening Vkomic shows the VK ID tab again.
+      const result = await WebBrowser.openAuthSessionAsync(request.url, VK_ANDROID_REDIRECT_URI, {
+        createTask: false,
+      });
       if (result.type !== "success") return;
 
       const callback = new URL(result.url);
