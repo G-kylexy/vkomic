@@ -474,6 +474,9 @@ const upsertTopicNode = (nodes: VkNode[], nextNode: VkNode) => {
   nodes.push(nextNode);
 };
 
+// VK now writes board links as vk.ru; accept both domains.
+const hasVkLink = (value: string) => /vk\.(?:com|ru)/i.test(value);
+
 const parseTopicBodyEnhanced = (text: string, excludeTopicId?: string): VkNode[] => {
   const nodes: VkNode[] = [];
   const seenIds = new Set<string>();
@@ -526,9 +529,9 @@ const parseTopicBodyEnhanced = (text: string, excludeTopicId?: string): VkNode[]
 
   const lines = text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
   const invertedTopicUrlRegex =
-    /(?:https?:\/\/)?(?:[a-z0-9]+\.)?vk\.com\/topic-(\d+)_(\d+)\|([^\]]+)\]/gi;
+    /(?:https?:\/\/)?(?:[a-z0-9]+\.)?vk\.(?:com|ru)\/topic-(\d+)_(\d+)\|([^\]]+)\]/gi;
   const topicUrlRegex =
-    /(?:https?:\/\/)?(?:[a-z0-9]+\.)?vk\.com\/topic-(\d+)_(\d+)(?:\?post=(\d+))?/gi;
+    /(?:https?:\/\/)?(?:[a-z0-9]+\.)?vk\.(?:com|ru)\/topic-(\d+)_(\d+)(?:\?post=(\d+))?/gi;
   const docUrlRegex =
     /(?:https?:\/\/)?(?:[a-z0-9]+\.)?vk\.(?:com|ru)\/doc(-?\d+)_(\d+)/gi;
 
@@ -573,14 +576,14 @@ const parseTopicBodyEnhanced = (text: string, excludeTopicId?: string): VkNode[]
 
       if ((!title || title.length < 2) && i > 0) {
         const prevLine = lines[i - 1].trim();
-        if (!prevLine.includes("vk.com") && prevLine.length > 2) {
+        if (!hasVkLink(prevLine) && prevLine.length > 2) {
           title = cleanTitle(prevLine);
         }
       }
 
       if ((!title || title.length < 2) && urlEnd < line.length) {
         const afterText = line.substring(urlEnd).trim();
-        if (afterText.length > 2 && !afterText.includes("vk.com")) {
+        if (afterText.length > 2 && !hasVkLink(afterText)) {
           title = cleanTitle(afterText);
         }
       }
@@ -613,7 +616,7 @@ const parseTopicBodyEnhanced = (text: string, excludeTopicId?: string): VkNode[]
         title = cleanTitle(beforeText);
       } else if (i > 0) {
         const prevLine = lines[i - 1].trim();
-        if (!prevLine.includes("vk.com") && prevLine.length > 2) {
+        if (!hasVkLink(prevLine) && prevLine.length > 2) {
           title = cleanTitle(prevLine);
         }
       }
@@ -621,7 +624,7 @@ const parseTopicBodyEnhanced = (text: string, excludeTopicId?: string): VkNode[]
       const titleLower = title.toLowerCase();
       if ((titleLower.includes("telecharger") || titleLower.includes("download")) && i > 0) {
         const prevLine = lines[i - 1].trim();
-        if (!prevLine.includes("vk.com") && prevLine.length > 2) {
+        if (!hasVkLink(prevLine) && prevLine.length > 2) {
           title = cleanTitle(prevLine);
         }
       }
