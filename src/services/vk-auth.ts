@@ -1,7 +1,10 @@
 import * as Crypto from "expo-crypto";
 
 export const VK_ANDROID_CLIENT_ID = "54761286";
-export const VK_ANDROID_REDIRECT_URI = `vk${VK_ANDROID_CLIENT_ID}://vk.ru`;
+// VK ID rejects the bare "vk<id>://vk.ru" ("redirect_uri is missing or invalid")
+// and only accepts the "/blank.html" form. The intent filter (scheme + host)
+// still matches this path, and openAuthSessionAsync matches by prefix.
+export const VK_ANDROID_REDIRECT_URI = `vk${VK_ANDROID_CLIENT_ID}://vk.ru/blank.html`;
 export const VK_AUTHORIZATION_ENDPOINT = "https://id.vk.ru/authorize";
 export const VK_TOKEN_ENDPOINT = "https://id.vk.ru/oauth2/auth";
 
