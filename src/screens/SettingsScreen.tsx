@@ -9,14 +9,15 @@ import {
   Pressable,
   Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Section } from "../components/Section";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { VkAuthModal } from "../components/VkAuthModal";
 import { useVk } from "../context/VkContext";
+import { useVkSignIn } from "../hooks/useVkSignIn";
 import { useAppData } from "../context/AppDataContext";
 import { getT, Language } from "../i18n";
 import { radius, spacing, tabAccents } from "../theme";
@@ -37,9 +38,6 @@ export const SettingsScreen: React.FC = () => {
     downloadPath,
     setDownloadPath,
     activePalette: palette,
-    showAuthModal,
-    setShowAuthModal,
-    handleAuthSuccess,
     logout,
   } = useVk();
 
@@ -83,9 +81,7 @@ export const SettingsScreen: React.FC = () => {
     setLocalTopicId("47515406");
   };
 
-  const openAuth = () => {
-    setShowAuthModal(true);
-  };
+  const { signIn, isSigningIn } = useVkSignIn();
 
 
   const setLang = (next: Language) => {
@@ -154,22 +150,29 @@ export const SettingsScreen: React.FC = () => {
           {/* OAuth Login Button */}
           {!token ? (
             <Pressable
-              style={[styles.vkLoginBtn, { backgroundColor: "#4C75A3" }]}
-              onPress={openAuth}
+              style={[styles.vkLoginBtn, { backgroundColor: "#4C75A3" }, isSigningIn && { opacity: 0.65 }]}
+              onPress={() => void signIn()}
+              disabled={isSigningIn}
             >
-              <Ionicons name="logo-vk" size={24} color="#fff" />
-              <Text style={styles.vkLoginText}>Se connecter avec VK</Text>
+              {isSigningIn ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name="logo-vk" size={24} color="#fff" />
+              )}
+              <Text style={styles.vkLoginText}>
+                {isSigningIn ? t.settings.signingIn : t.settings.signIn}
+              </Text>
             </Pressable>
           ) : (
             <View style={[styles.connectedBanner, { backgroundColor: `${palette.success}15`, borderColor: `${palette.success}40` }]}>
               <Ionicons name="checkmark-circle" size={20} color={palette.success} />
-              <Text style={[styles.connectedText, { color: palette.success }]}>Connecté à VK</Text>
+              <Text style={[styles.connectedText, { color: palette.success }]}>{t.settings.connected}</Text>
               <Pressable
                 style={[styles.logoutBtn, { backgroundColor: `${palette.danger}15`, borderColor: `${palette.danger}40` }]}
                 onPress={logout}
               >
                 <Ionicons name="log-out-outline" size={16} color={palette.danger} />
-                <Text style={[styles.logoutText, { color: palette.danger }]}>Déconnexion</Text>
+                <Text style={[styles.logoutText, { color: palette.danger }]}>{t.settings.logout}</Text>
               </Pressable>
             </View>
           )}
@@ -346,13 +349,6 @@ export const SettingsScreen: React.FC = () => {
         variant="danger"
         palette={palette}
         accent={accent.accent}
-      />
-
-      {/* Login VK Modal */}
-      <VkAuthModal
-        visible={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={handleAuthSuccess}
       />
     </View>
   );

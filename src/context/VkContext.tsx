@@ -79,8 +79,6 @@ interface VkContextType {
     setStatus: React.Dispatch<React.SetStateAction<VkConnectionStatus>>;
     activePalette: typeof palette;
     isOffline: boolean;
-    showAuthModal: boolean;
-    setShowAuthModal: (show: boolean) => void;
     handleAuthSuccess: (session: VkAuthSession) => Promise<void>;
     logout: () => Promise<void>;
 }
@@ -108,7 +106,6 @@ export const VkProvider: React.FC<{ children: React.ReactNode }> = ({
         regionAggregate: null,
     });
     const [isOffline, setIsOffline] = useState(false);
-    const [showAuthModal, setShowAuthModal] = useState(false);
 
     // Network status check
     const checkNetworkStatus = useCallback(async () => {
@@ -347,13 +344,11 @@ export const VkProvider: React.FC<{ children: React.ReactNode }> = ({
         setAutoSync,
         activePalette,
         isOffline,
-        showAuthModal,
-        setShowAuthModal,
         handleAuthSuccess,
         logout,
     }), [
         token, groupId, topicId, language, downloadPath, status, isReady,
-        autoSync, activePalette, isOffline, showAuthModal,
+        autoSync, activePalette, isOffline,
         // Including functions here would trigger re-renders anyway without useCallback, 
         // but removing them from deps might cause stale closures if they weren't generic.
         // For now, this restores functionality.
