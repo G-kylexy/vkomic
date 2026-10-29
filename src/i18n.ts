@@ -121,6 +121,10 @@ export type Translations = {
     pageError: string;
     retry: string;
     pageOf: string;
+    modePanels: string;
+    modeFullPage: string;
+    panelsHint: string;
+    panelOf: string;
   };
   downloads: {
     title: string;
@@ -282,6 +286,10 @@ const translations: Record<Language, Translations> = {
       pageError: "Impossible de charger cette page",
       retry: "Réessayer",
       pageOf: "Page {page} sur {total}",
+      modePanels: "Case par case",
+      modeFullPage: "Page entière",
+      panelsHint: "Case par case : touche les bords pour avancer, maintiens le doigt pour voir la page.",
+      panelOf: "Case {panel}/{total}",
     },
     downloads: {
       title: "Téléchargements",
@@ -494,6 +502,10 @@ const translations: Record<Language, Translations> = {
       pageError: "Couldn't load this page",
       retry: "Try again",
       pageOf: "Page {page} of {total}",
+      modePanels: "Panel by panel",
+      modeFullPage: "Whole page",
+      panelsHint: "Panel by panel: tap the edges to move on, hold to see the whole page.",
+      panelOf: "Panel {panel}/{total}",
     },
     downloads: {
       title: "Downloads",
@@ -702,6 +714,10 @@ const translations: Record<Language, Translations> = {
       pageError: "Не удалось загрузить страницу",
       retry: "Повторить",
       pageOf: "Страница {page} из {total}",
+      modePanels: "По кадрам",
+      modeFullPage: "Вся страница",
+      panelsHint: "По кадрам: нажимай на края, чтобы листать, удерживай палец, чтобы увидеть страницу.",
+      panelOf: "Кадр {panel}/{total}",
     },
     downloads: {
       title: "Загрузки",
