@@ -8,6 +8,12 @@ export interface PdfDocumentInfo {
     docId: string;
 }
 
+/** Page height / width, and its panels as normalized [x, y, w, h] in reading order. */
+export interface PageLayout {
+    aspect: number;
+    panels: number[][];
+}
+
 class PdfCacheService {
     private cache: Map<number, string> = new Map();
     // Only page file paths: a page dropped here is read back from the native disk
@@ -156,6 +162,30 @@ class PdfCacheService {
         PdfPageExtractor?.setKeepScreenOn?.(enabled);
     }
 
+    private panelLayouts = new Map<string, Promise<PageLayout>>();
+
+    /** Panels of a page in reading order; an empty list means: show the whole page. */
+    detectPanels(pageNum: number, rightToLeft: boolean): Promise<PageLayout> {
+        if (!this.isDocumentOpen) return Promise.reject(new Error("No document open"));
+        const key = `${pageNum}_${rightToLeft}`;
+        let layout = this.panelLayouts.get(key);
+        if (!layout) {
+            layout = PdfPageExtractor.detectPanels(pageNum, rightToLeft) as Promise<PageLayout>;
+            layout.catch(() => this.panelLayouts.delete(key));
+            this.panelLayouts.set(key, layout);
+        }
+        return layout;
+    }
+
+    /** Renders a normalized crop of a page at screen size; returns a file URI. */
+    async extractPanel(pageNum: number, crop: number[], outputWidth: number, outputHeight: number): Promise<string> {
+        if (!this.isDocumentOpen) throw new Error("No document open");
+        const path: string = await PdfPageExtractor.extractPanel(
+            pageNum, crop[0], crop[1], crop[2], crop[3], outputWidth, outputHeight,
+        );
+        return path.startsWith("/") ? `file://${path}` : path;
+    }
+
     getCachedUri(pageNum: number): string | null {
         return this.cache.get(pageNum) || null;
     }
@@ -187,6 +217,7 @@ class PdfCacheService {
         this.isDocumentOpen = false;
         this.currentDocId = null;
         this.cache.clear();
+        this.panelLayouts.clear();
         this.pendingTasks = [];
         this.isProcessing = false;
         this.pruneCacheIfNeeded(800);

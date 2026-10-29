@@ -7,7 +7,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useAppData, useDownloads } from "../context/AppDataContext";
 import { useVk } from "../context/VkContext";
 import * as FolderService from "../services/FolderService";
-import { getT } from "../i18n";
+import { getT, formatDownloadsCount } from "../i18n";
 import { palette as defaultPalette, radius, spacing, tabAccents } from "../theme";
 import { DownloadItem } from "../types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -277,7 +277,7 @@ export const DownloadsScreen: React.FC = () => {
         Alert.alert(t.common.error, t.downloads.folderOpenError);
       }
     } else {
-      Alert.alert("Info", "Les fichiers sont stockés dans le dossier Documents de l'application.");
+      Alert.alert(t.common.info, t.downloads.iosDocumentsInfo);
     }
   }, [t]);
 
@@ -290,7 +290,7 @@ export const DownloadsScreen: React.FC = () => {
             style={({ pressed }: any) => [styles.undoBtn, pressed && { opacity: 0.7 }]}
             onPress={() => undoDelete(item.id)}
           >
-            <Text style={styles.undoBtnText}>ANNULER</Text>
+            <Text style={styles.undoBtnText}>{t.common.undo}</Text>
           </Pressable>
         </View>
       );
@@ -396,7 +396,7 @@ export const DownloadsScreen: React.FC = () => {
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>{t.downloads.title}</Text>
-            <Text style={styles.headerSubtitle}>{totalCount} {t.nav.downloads.toLowerCase()}</Text>
+            <Text style={styles.headerSubtitle}>{formatDownloadsCount(totalCount, language)}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             {downloads.length > 0 && (
@@ -463,7 +463,7 @@ export const DownloadsScreen: React.FC = () => {
               downloads.every(d => d.status === 'completed') ? (
                 <View style={styles.allCompletedBanner}>
                   <Ionicons name="checkmark-circle" size={24} color={p.success} />
-                  <Text style={styles.allCompletedText}>{t.downloads.statusCompleted}</Text>
+                  <Text style={styles.allCompletedText}>{t.downloads.allCompleted}</Text>
                 </View>
               ) : null
             }
@@ -488,9 +488,9 @@ export const DownloadsScreen: React.FC = () => {
           clearDownloads();
           setClearDialog(false);
         }}
-        title="Effacer l'historique"
-        message="Voulez-vous supprimer tous les téléchargements de la liste ?"
-        confirmText="Effacer"
+        title={t.downloads.clearConfirmTitle}
+        message={t.downloads.clearConfirmMsg}
+        confirmText={t.downloads.clearConfirmAction}
         cancelText={t.common.cancel}
         icon="trash"
         palette={p}

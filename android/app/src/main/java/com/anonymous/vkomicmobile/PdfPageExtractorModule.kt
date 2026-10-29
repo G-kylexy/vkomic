@@ -3,10 +3,14 @@ package com.anonymous.vkomicmobile
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import android.util.Log
 import android.view.WindowManager
 import com.facebook.react.bridge.*
@@ -14,8 +18,11 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -34,6 +41,8 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
     private val bitmapPool: ConcurrentHashMap<String, ConcurrentLinkedQueue<Bitmap>> = ConcurrentHashMap()
     private val scopeExtract = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var currentRegionJob: Job? = null
+    // Panels found per document page and reading direction.
+    private val panelCache = ConcurrentHashMap<String, Pair<Double, List<DoubleArray>>>()
 
     private fun getBitmapFromPool(width: Int, height: Int): Bitmap {
         val key = "${width}x${height}"
@@ -140,6 +149,23 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
         return Pair(pfd, openRendererFor(pfd))
     }
 
+    /**
+     * The document's size. Descriptors from the storage access framework report
+     * -1, so the provider is asked instead.
+     */
+    private fun documentSize(uri: String, pfd: ParcelFileDescriptor): Long {
+        if (pfd.statSize >= 0 || !uri.startsWith("content://")) return pfd.statSize
+        return try {
+            reactContext.contentResolver
+                .query(Uri.parse(uri), arrayOf(OpenableColumns.SIZE), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null }
+                ?: -1L
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot read the size of $uri", e)
+            -1L
+        }
+    }
+
     @ReactMethod
     fun openDocument(uri: String, promise: Promise) {
         scope.launch {
@@ -150,7 +176,7 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
                 val (pfd, renderer) = openPdf(uri)
                 // Rendered pages are cached per document. The size keeps a file
                 // downloaded again under the same URI from reusing stale pages.
-                val docId = "${uri.hashCode()}_${pfd.statSize}"
+                val docId = "${uri.hashCode()}_${documentSize(uri, pfd)}"
 
                 currentDocId = docId
                 currentPfd = pfd
@@ -252,6 +278,28 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
     }
 
     /**
+     * Maps a normalized crop of the page (it may extend past the page, for
+     * letterboxing) onto an outputWidth x outputHeight bitmap.
+     */
+    private fun regionMatrix(
+        page: PdfRenderer.Page,
+        cropX: Double, cropY: Double,
+        cropW: Double, cropH: Double,
+        outputWidth: Int, outputHeight: Int,
+    ): Matrix {
+        val pageW = page.width.toFloat()
+        val pageH = page.height.toFloat()
+        // Scale: combien de pixels de sortie par unité normalisée de page
+        val sx = outputWidth.toFloat() / (cropW.toFloat() * pageW)
+        val sy = outputHeight.toFloat() / (cropH.toFloat() * pageH)
+        // Translation: le point (cropX*pageW, cropY*pageH) doit arriver en (0,0) du bitmap
+        return Matrix().apply {
+            setScale(sx, sy)
+            postTranslate(-cropX.toFloat() * pageW * sx, -cropY.toFloat() * pageH * sy)
+        }
+    }
+
+    /**
      * Extrait une REGION spécifique d'une page à haute résolution (pour le zoom par tuiles).
      * cropX, cropY, cropW, cropH sont en coordonnées normalisées [0..1] du PDF (peuvent déborder pour le letterboxing).
      * outputWidth, outputHeight = taille du bitmap de sortie (= taille écran en pixels physiques).
@@ -281,20 +329,7 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
                         Pair("", false)
                     } else {
                         val page = renderer.openPage(pageNum)
-                        val pageW = page.width.toFloat()
-                        val pageH = page.height.toFloat()
-
-                        // Scale: combien de pixels de sortie par unité normalisée de page
-                        val sx = outputWidth.toFloat() / (cropW.toFloat() * pageW)
-                        val sy = outputHeight.toFloat() / (cropH.toFloat() * pageH)
-
-                        // Translation: le point (cropX*pageW, cropY*pageH) doit arriver en (0,0) du bitmap
-                        val tx = -cropX.toFloat() * pageW * sx
-                        val ty = -cropY.toFloat() * pageH * sy
-
-                        val matrix = android.graphics.Matrix()
-                        matrix.setScale(sx, sy)
-                        matrix.postTranslate(tx, ty)
+                        val matrix = regionMatrix(page, cropX, cropY, cropW, cropH, outputWidth, outputHeight)
 
                         // Si on a été annulé en attendant le lock, on arrête les frais avant de calculer
                         if (!isActive) {
@@ -337,6 +372,118 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
             } catch (e: Exception) {
                 Log.e(TAG, "extractPageRegion failed page $pageNum", e)
                 withContext(Dispatchers.Main) { promise.reject("EXTRACT_REGION_ERROR", e.message) }
+            }
+        }
+    }
+
+    /**
+     * Finds the panels of a page for panel-by-panel reading (see PanelDetector).
+     * Resolves { aspect: page height / width, panels: [[x, y, w, h], ...] } with
+     * normalized rectangles in reading order, or no panels when the page has none.
+     */
+    @ReactMethod
+    fun detectPanels(pageNum: Int, rightToLeft: Boolean, promise: Promise) {
+        scopeExtract.launch {
+            try {
+                val renderer = currentRenderer
+                    ?: throw IllegalStateException("Document not opened")
+                if (pageNum < 0 || pageNum >= currentPageCount) {
+                    throw IllegalArgumentException("Page index out of bounds: $pageNum")
+                }
+
+                val key = "${currentDocId}_${pageNum}_$rightToLeft"
+                val (aspect, panels) = panelCache[key] ?: run {
+                    val startedAt = SystemClock.elapsedRealtime()
+                    val (bitmap, ratio) = synchronized(renderer) {
+                        val page = renderer.openPage(pageNum)
+                        val pageRatio = page.height.toDouble() / page.width
+                        val width = PanelDetector.DETECT_WIDTH
+                        val small = Bitmap.createBitmap(width, max(1, (width * pageRatio).roundToInt()), Bitmap.Config.ARGB_8888)
+                        small.eraseColor(Color.WHITE)
+                        page.render(small, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        page.close()
+                        Pair(small, pageRatio)
+                    }
+                    val pixels = IntArray(bitmap.width * bitmap.height)
+                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                    val luminance = IntArray(pixels.size) { i ->
+                        val c = pixels[i]
+                        (Color.red(c) * 299 + Color.green(c) * 587 + Color.blue(c) * 114) / 1000
+                    }
+                    val found = PanelDetector.detect(luminance, bitmap.width, bitmap.height, rightToLeft)
+                    bitmap.recycle()
+                    Log.i(TAG, "Page $pageNum: ${found.size} panels in ${SystemClock.elapsedRealtime() - startedAt} ms")
+                    Pair(ratio, found).also { panelCache[key] = it }
+                }
+
+                val result = Arguments.createMap().apply {
+                    putDouble("aspect", aspect)
+                    putArray("panels", Arguments.createArray().apply {
+                        panels.forEach { rect ->
+                            pushArray(Arguments.createArray().apply { rect.forEach { pushDouble(it) } })
+                        }
+                    })
+                }
+                withContext(Dispatchers.Main) { promise.resolve(result) }
+            } catch (e: Exception) {
+                Log.e(TAG, "detectPanels failed page $pageNum", e)
+                withContext(Dispatchers.Main) { promise.reject("DETECT_PANELS_ERROR", e.message) }
+            }
+        }
+    }
+
+    /**
+     * Renders one panel view at screen size: a normalized crop that may extend
+     * past the page (black there). Unlike extractPageRegion, a new request does
+     * not cancel the previous one, so the next panels can be prepared ahead, and
+     * renders stay on disk for going back.
+     */
+    @ReactMethod
+    fun extractPanel(
+        pageNum: Int,
+        cropX: Double, cropY: Double,
+        cropW: Double, cropH: Double,
+        outputWidth: Int, outputHeight: Int,
+        promise: Promise
+    ) {
+        scopeExtract.launch {
+            try {
+                val renderer = currentRenderer
+                    ?: throw IllegalStateException("Document not opened")
+                if (pageNum < 0 || pageNum >= currentPageCount) {
+                    throw IllegalArgumentException("Page index out of bounds: $pageNum")
+                }
+
+                val crop = String.format(Locale.ROOT, "%.4f_%.4f_%.4f_%.4f", cropX, cropY, cropW, cropH)
+                val file = File(
+                    getCacheDir(),
+                    "${currentDocId ?: "unknown"}_panel_${pageNum}_${crop.hashCode()}_${outputWidth}x$outputHeight.jpg",
+                )
+                if (file.length() == 0L) {
+                    synchronized(renderer) {
+                        val page = renderer.openPage(pageNum)
+                        val matrix = regionMatrix(page, cropX, cropY, cropW, cropH, outputWidth, outputHeight)
+                        val bitmap = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888)
+                        // Black around the page, white under it: PDF pages need not paint
+                        // their own background.
+                        bitmap.eraseColor(Color.BLACK)
+                        val pageArea = RectF(0f, 0f, page.width.toFloat(), page.height.toFloat())
+                        matrix.mapRect(pageArea)
+                        Canvas(bitmap).drawRect(pageArea, Paint().apply { color = Color.WHITE })
+                        page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        page.close()
+                        val partial = File(file.path + ".part")
+                        FileOutputStream(partial).use { output ->
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                        }
+                        bitmap.recycle()
+                        partial.renameTo(file)
+                    }
+                }
+                withContext(Dispatchers.Main) { promise.resolve(file.absolutePath) }
+            } catch (e: Exception) {
+                Log.e(TAG, "extractPanel failed page $pageNum", e)
+                withContext(Dispatchers.Main) { promise.reject("EXTRACT_PANEL_ERROR", e.message) }
             }
         }
     }
@@ -385,6 +532,7 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
             currentPfd = null
             currentDocId = null
             currentPageCount = 0
+            panelCache.clear()
         }
     }
 

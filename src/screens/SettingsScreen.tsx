@@ -268,7 +268,7 @@ export const SettingsScreen: React.FC = () => {
                 {t.settings.downloadFolderLabel || "Dossier de téléchargement"}
               </Text>
               <Text style={[styles.folderPath, { color: palette.muted }]} numberOfLines={1}>
-                {downloadPath ? getFolderDisplayName(downloadPath) : "Appuyez pour choisir..."}
+                {downloadPath ? getFolderDisplayName(downloadPath) : t.settings.tapToChoose}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={palette.subtle} />
@@ -290,7 +290,7 @@ export const SettingsScreen: React.FC = () => {
           </Pressable>
         </Section>
 
-        <Text style={styles.versionText}>vkomic v{Constants.expoConfig?.version ?? "inconnue"}</Text>
+        <Text style={styles.versionText}>VKomic v{Constants.expoConfig?.version ?? "?"}</Text>
       </ScrollView>
 
       {/* Bouton Sauvegarder global */}
@@ -326,9 +326,9 @@ export const SettingsScreen: React.FC = () => {
         visible={folderDialog.visible}
         onClose={() => setFolderDialog({ visible: false, folderName: "", folderUri: "" })}
         onConfirm={confirmFolderChange}
-        title="Changer le dossier"
-        message={`Les prochains téléchargements seront sauvegardés dans:\n\n${folderDialog.folderName}`}
-        confirmText="Confirmer"
+        title={t.settings.changeFolderTitle}
+        message={t.settings.changeFolderMsg.replace("{folder}", folderDialog.folderName)}
+        confirmText={t.common.confirm}
         cancelText={t.common.cancel}
         icon="folder-open"
         variant="success"
@@ -341,9 +341,9 @@ export const SettingsScreen: React.FC = () => {
         visible={resetDialog}
         onClose={() => setResetDialog(false)}
         onConfirm={confirmResetDatabase}
-        title="Réinitialiser"
-        message="L'index et toutes vos données téléchargées seront supprimés. Vous devrez synchroniser à nouveau."
-        confirmText="Réinitialiser"
+        title={t.settings.resetConfirmTitle}
+        message={t.settings.resetConfirmMsg}
+        confirmText={t.settings.resetConfirmAction}
         cancelText={t.common.cancel}
         icon="trash"
         variant="danger"

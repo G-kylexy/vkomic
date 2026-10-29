@@ -4,12 +4,14 @@ import { FlashList, FlashListRef } from "@shopify/flash-list";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useVk } from "../context/VkContext";
 import { spacing, radius } from "../theme";
 import { getT } from "../i18n";
 import { pdfCacheService } from "../services/PdfCacheService";
 import { ZoomablePage } from "../components/ZoomablePage";
+import { PanelReader } from "../components/PanelReader";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence, withDelay } from "react-native-reanimated";
 
 interface ReaderScreenProps {
@@ -22,6 +24,8 @@ type ViewMode = "horizontal" | "manga" | "vertical";
 const VIEW_MODES: ViewMode[] = ["horizontal", "manga", "vertical"];
 // The last mode picked applies to every album opened afterwards.
 const VIEW_MODE_KEY = "reader_view_mode";
+// Panel-by-panel reading, remembered the same way.
+const PANEL_MODE_KEY = "reader_panel_mode";
 const isViewMode = (value: string | null): value is ViewMode => VIEW_MODES.includes(value as ViewMode);
 const MODE_ICONS: Record<ViewMode, keyof typeof Ionicons.glyphMap> = {
     horizontal: "book-outline",
@@ -94,9 +98,14 @@ const PageScrubber: React.FC<{
 export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose }) => {
     const { activePalette: p, language } = useVk();
     const { width, height } = useWindowDimensions();
+    // The reader is laid over the app's safe area, so its bars keep clear of the
+    // status bar and the gesture bar themselves.
+    const insets = useSafeAreaInsets();
     const t = getT(language);
 
     const [viewMode, setViewMode] = useState<ViewMode>("horizontal");
+    const [panelMode, setPanelMode] = useState(false);
+    const [panelInfo, setPanelInfo] = useState<{ index: number; count: number } | null>(null);
     const [showControls, setShowControls] = useState(true);
     const [documentLoaded, setDocumentLoaded] = useState(false);
     const [documentError, setDocumentError] = useState(false);
@@ -122,13 +131,14 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
     const modeLabel = (mode: ViewMode) =>
         mode === "manga" ? t.reader.modeManga : mode === "vertical" ? t.reader.modeContinuous : t.reader.modePaged;
 
-    const showModeToast = (mode: ViewMode) => {
-        setToastText(modeLabel(mode));
+    const showToast = (text: string, visibleMs = 1000) => {
+        setToastText(text);
         toastOpacity.value = withSequence(
             withTiming(1, { duration: 200 }),
-            withDelay(1000, withTiming(0, { duration: 400 }))
+            withDelay(visibleMs, withTiming(0, { duration: 400 }))
         );
     };
+    const showModeToast = (mode: ViewMode) => showToast(modeLabel(mode));
 
     const toastStyle = useAnimatedStyle(() => ({
         opacity: toastOpacity.value,
@@ -162,14 +172,17 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
                 // 1. Load progress and the reading mode first
                 let targetPage = 0;
                 let mode: ViewMode = "horizontal";
+                let panels = false;
                 try {
-                    const [savedPage, savedMode] = await Promise.all([
+                    const [savedPage, savedMode, savedPanels] = await Promise.all([
                         AsyncStorage.getItem(`progress_${uri}`),
                         AsyncStorage.getItem(VIEW_MODE_KEY),
+                        AsyncStorage.getItem(PANEL_MODE_KEY),
                     ]);
                     const pageNum = savedPage ? parseInt(savedPage, 10) : NaN;
                     if (!isNaN(pageNum) && pageNum > 0) targetPage = pageNum;
                     if (isViewMode(savedMode)) mode = savedMode;
+                    panels = savedPanels === "1";
                 } catch (e) {
                     console.warn("ReaderScreen: Failed to load progress", e);
                 }
@@ -185,6 +198,7 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
                     // 3. Load the specific initial page
                     const actualTargetPage = Math.min(targetPage, info.pageCount - 1);
                     setViewMode(mode);
+                    setPanelMode(panels);
                     setCurrentPage(actualTargetPage);
 
                     // Charger la page AVANT d'afficher la liseuse pour éviter le clignotement
@@ -284,10 +298,10 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
             if (isMountedRef.current) {
                 pdfCacheService.updateVisiblePage(pageIndex);
                 saveProgress(pageIndex);
-                pdfCacheService.prefetchAround(pageIndex, width);
+                if (!panelMode) pdfCacheService.prefetchAround(pageIndex, width);
             }
         }, 150); // 150ms debounce
-    }, [currentPage, saveProgress, width]);
+    }, [currentPage, saveProgress, width, panelMode]);
 
     // onViewableItemsChanged must keep one identity for FlashList: it calls the
     // latest handlePageChange through this ref.
@@ -303,13 +317,27 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
         AsyncStorage.setItem(VIEW_MODE_KEY, nextMode).catch(() => { });
     }, [viewMode, language]);
 
+    const togglePanelMode = useCallback(() => {
+        const next = !panelMode;
+        setPanelMode(next);
+        setPanelInfo(null);
+        showToast(next ? t.reader.panelsHint : t.reader.modeFullPage, next ? 2500 : 1000);
+        AsyncStorage.setItem(PANEL_MODE_KEY, next ? "1" : "0").catch(() => { });
+    }, [panelMode, language]);
+
+    const onPanelChange = useCallback((index: number, count: number) => setPanelInfo({ index, count }), []);
+
     const seekToPage = useCallback((pageNum: number) => {
+        if (panelMode) {
+            handlePageChange(pageNum);
+            return;
+        }
         flatListRef.current?.scrollToIndex({
             index: indexOfPage(pageNum, totalPagesRef.current, viewMode),
             animated: false,
         });
         handlePageChange(pageNum);
-    }, [viewMode, handlePageChange]);
+    }, [viewMode, handlePageChange, panelMode]);
 
     const retryPage = useCallback((pageNum: number) => {
         errorPagesRef.current.delete(pageNum);
@@ -387,7 +415,7 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
     return (
         <View style={[styles.container, { backgroundColor: "#000" }]}>
             {showControls && (
-                <View style={[styles.header, { backgroundColor: `${p.background}F0` }]}>
+                <View style={[styles.header, { backgroundColor: `${p.background}F0`, paddingTop: insets.top, height: 60 + insets.top }]}>
                     <Pressable onPress={onClose} style={styles.backBtn} accessibilityLabel={t.reader.back}>
                         <Ionicons name="close" size={24} color={p.text} />
                     </Pressable>
@@ -397,8 +425,18 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
                         </Text>
                         <Text style={[styles.pageInfo, { color: p.muted }]}>
                             {currentPage + 1} / {totalPages}
+                            {panelMode && panelInfo && panelInfo.count > 1
+                                ? `  ·  ${t.reader.panelOf.replace("{panel}", String(panelInfo.index + 1)).replace("{total}", String(panelInfo.count))}`
+                                : ""}
                         </Text>
                     </View>
+                    <Pressable
+                        onPress={togglePanelMode}
+                        style={styles.modeBtn}
+                        accessibilityLabel={panelMode ? t.reader.modeFullPage : t.reader.modePanels}
+                    >
+                        <Ionicons name={panelMode ? "scan" : "scan-outline"} size={22} color={panelMode ? p.primaryBright : p.text} />
+                    </Pressable>
                     <Pressable onPress={toggleViewMode} style={styles.modeBtn} accessibilityLabel={modeLabel(viewMode)}>
                         <Ionicons name={MODE_ICONS[viewMode]} size={22} color={p.text} />
                     </Pressable>
@@ -406,6 +444,19 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
             )}
 
             <View style={styles.viewer}>
+                {panelMode ? (
+                    <PanelReader
+                        page={currentPage}
+                        totalPages={totalPages}
+                        rightToLeft={viewMode === "manga"}
+                        width={width}
+                        height={height}
+                        onPageChange={handlePageChange}
+                        onPanelChange={onPanelChange}
+                        onToggleControls={toggleControls}
+                        themeColor={p.primaryBright}
+                    />
+                ) : (
                 <FlashList
                     key={`${uri}_${viewMode}`}
                     ref={flatListRef}
@@ -423,11 +474,12 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
                     viewabilityConfig={viewabilityConfig}
                     initialScrollIndex={indexOfPage(currentPage, totalPages, viewMode)}
                 />
+                )}
             </View>
 
             {showControls && totalPages > 1 && (
                 <View
-                    style={[styles.footer, { backgroundColor: `${p.background}F0` }]}
+                    style={[styles.footer, { backgroundColor: `${p.background}F0`, paddingBottom: spacing.sm + insets.bottom }]}
                     accessibilityLabel={t.reader.pageOf
                         .replace("{page}", String(currentPage + 1))
                         .replace("{total}", String(totalPages))}
