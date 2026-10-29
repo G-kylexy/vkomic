@@ -30,6 +30,9 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
         private const val VKOMIC_USER_AGENT =
             "KateMobileAndroid/110.1 lite-x86_64 (Android 11; SDK 30; x86_64; en)"
         private const val RESPONSE_SNIFF_BYTES = 512
+        // Matches the 64 KB input buffer: the local file stream is unbuffered, so
+        // smaller chunks meant one write syscall per 8 KB.
+        private const val COPY_BUFFER_BYTES = 64 * 1024
         private const val HTTP_RANGE_NOT_SATISFIABLE = 416
     }
 
@@ -521,7 +524,7 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
                 outputStream = FileOutputStream(file, append)
 
                 val inputStream = openValidatedInputStream(activeConnection)
-                val buffer = ByteArray(8192)
+                val buffer = ByteArray(COPY_BUFFER_BYTES)
                 var receivedBytes = startByte
                 var bytesRead = 0
                 var lastProgressTime = System.currentTimeMillis()
@@ -718,7 +721,7 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
                 outputStream = BufferedOutputStream(rawStream, 256 * 1024)
 
                 val inputStream = openValidatedInputStream(activeConnection)
-                val buffer = ByteArray(16384) // 16KB buffer
+                val buffer = ByteArray(COPY_BUFFER_BYTES)
                 var receivedBytes = effectiveStartByte
                 var bytesRead = 0
                 var lastProgressTime = System.currentTimeMillis()

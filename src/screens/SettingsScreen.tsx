@@ -101,7 +101,7 @@ export const SettingsScreen: React.FC = () => {
       }
     } catch (error) {
       console.error("Error picking folder:", error);
-      Alert.alert("Erreur", "Impossible de sélectionner le dossier");
+      Alert.alert(t.common.error, t.settings.folderPickError);
     }
   };
 
@@ -329,7 +329,7 @@ export const SettingsScreen: React.FC = () => {
         title="Changer le dossier"
         message={`Les prochains téléchargements seront sauvegardés dans:\n\n${folderDialog.folderName}`}
         confirmText="Confirmer"
-        cancelText="Annuler"
+        cancelText={t.common.cancel}
         icon="folder-open"
         variant="success"
         palette={palette}
@@ -344,7 +344,7 @@ export const SettingsScreen: React.FC = () => {
         title="Réinitialiser"
         message="L'index et toutes vos données téléchargées seront supprimés. Vous devrez synchroniser à nouveau."
         confirmText="Réinitialiser"
-        cancelText="Annuler"
+        cancelText={t.common.cancel}
         icon="trash"
         variant="danger"
         palette={palette}

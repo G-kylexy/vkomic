@@ -2,16 +2,17 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useVk } from "../context/VkContext";
+import { getT } from "../i18n";
 
 export const OfflineBanner: React.FC = () => {
-  const { isOffline, activePalette: p } = useVk();
+  const { isOffline, activePalette: p, language } = useVk();
 
   if (!isOffline) return null;
 
   return (
     <View style={[styles.banner, { backgroundColor: p.warning }]}>
       <Ionicons name="cloud-offline" size={16} color="#000" />
-      <Text style={styles.text}>Mode hors-ligne</Text>
+      <Text style={styles.text}>{getT(language).common.offline}</Text>
     </View>
   );
 };

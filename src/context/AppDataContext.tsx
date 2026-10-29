@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { InteractionManager, Platform } from "react-native";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, InteractionManager, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import ReactNativeBlobUtil from "react-native-blob-util";
@@ -32,7 +32,15 @@ type AppDataContextType = {
   goHome: () => void;
   goUp: (index?: number) => void;
   refreshCurrent: () => Promise<void>;
-  downloads: DownloadItem[];
+  clearCache: () => Promise<void>;
+  getDownloadDirUri: () => string | null;
+  deleteLocalFile: (uri: string) => Promise<void>;
+  globalSearchNodes: VkNode[];
+  readingFile: { uri: string; title: string; isConverted?: boolean } | null;
+  setReadingFile: (file: { uri: string; title: string; isConverted?: boolean } | null) => void;
+};
+
+type DownloadActions = {
   addDownload: (node: VkNode) => Promise<void>;
   pauseDownload: (id: string) => Promise<void>;
   resumeDownload: (id: string) => Promise<void>;
@@ -42,15 +50,19 @@ type AppDataContextType = {
   clearDownloads: () => Promise<void>;
   downloadAll: (nodes: VkNode[]) => Promise<void>;
   cancelAll: () => Promise<void>;
-  clearCache: () => Promise<void>;
-  getDownloadDirUri: () => string | null;
-  deleteLocalFile: (uri: string) => Promise<void>;
-  globalSearchNodes: VkNode[];
-  readingFile: { uri: string; title: string; isConverted?: boolean } | null;
-  setReadingFile: (file: { uri: string; title: string; isConverted?: boolean } | null) => void;
 };
 
+// Downloads live in their own context: progress ticks every 400 ms would
+// otherwise re-render every screen, hidden tabs included.
+type DownloadsContextType = DownloadActions & { downloads: DownloadItem[] };
+
 const AppDataContext = createContext<AppDataContextType | null>(null);
+const DownloadsContext = createContext<DownloadsContextType | null>(null);
+
+// Progress ticks would rewrite the saved list several times a second.
+const DOWNLOADS_SAVE_INTERVAL_MS = 5000;
+// Backstop for saving the catalog when the app stays in the foreground.
+const SYNCED_DATA_IDLE_SAVE_MS = 30000;
 
 
 const isSafUri = (uri: string) => uri?.startsWith("content://");
@@ -148,6 +160,16 @@ const validateIosDownload = async (result: any, item: DownloadItem) => {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Refusals that retrying straight away cannot fix: VK's file storage answers
+// some files with an instant 5xx "temporarily unavailable" page for days, and
+// deleted files with its "Fichier non disponible ou supprimé" HTML page.
+const vkRefusalReason = (error: unknown): DownloadItem["errorReason"] => {
+  if (!(error instanceof Error)) return undefined;
+  if (/HTTP Error: 5\d\d\b/.test(error.message)) return "vkUnavailable";
+  if (error.message.includes("HTML page instead of the requested file")) return "vkDeleted";
+  return undefined;
+};
 
 // Anyone can post on the VK board: never save files that install or run when opened.
 const BLOCKED_EXTENSIONS = new Set([
@@ -274,7 +296,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   // Batched progress updates to avoid race conditions with multiple concurrent downloads
   const pendingProgressRef = useRef(new Map<string, Partial<DownloadItem>>());
   const retryCountRef = useRef(new Map<string, number>());
-  const downloadUrlRefreshNeededRef = useRef(new Set<string>());
+  const lastSavedSyncedDataRef = useRef<VkNode[] | null>(null);
   const lastNotifRef = useRef(new Map<string, number>()); // Throttle notifications to 1s
   const MAX_AUTO_RETRIES = 3;
   const RETRY_DELAY_MS = 2000; // 2 seconds between retries
@@ -455,29 +477,24 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       /^https?:\/\/(?:[a-z0-9-]+\.)?vk\.(?:com|ru)\/doc(-?\d+)_(\d+)(?:[/?#].*)?$/i
     );
     const hasSignedParameters = /[?&](?:hash|dl)=[^&#]+/i.test(item.url);
-    const ownerId = item.vkOwnerId || vkDocumentMatch?.[1];
-    const docId = item.vkDocId || vkDocumentMatch?.[2];
-    const needsRefresh = downloadUrlRefreshNeededRef.current.has(item.id);
 
-    // Les URLs des pièces jointes VK sont déjà signées. Ne demander une URL
-    // fraîche qu'après un échec, ou immédiatement pour un lien vk.com/doc nu.
-    if (!needsRefresh && (!vkDocumentMatch || hasSignedParameters)) {
+    // Les URLs des pièces jointes VK sont déjà signées : on les utilise telles
+    // quelles, même après un échec. Redemander une URL à docs.getById coûtait
+    // une requête pour rien : le jeton VK ID n'a pas le droit "docs" (erreur 15).
+    if (!vkDocumentMatch || hasSignedParameters) {
       return item.url;
     }
 
+    const ownerId = item.vkOwnerId || vkDocumentMatch[1];
+    const docId = item.vkDocId || vkDocumentMatch[2];
     if (ownerId && docId && token) {
       const resolved = await getDocumentDownloadUrl(token, ownerId, docId, item.vkAccessKey);
       if (resolved) {
-        downloadUrlRefreshNeededRef.current.delete(item.id);
-        console.log(`[Download] Refreshed document URL for ${item.title}`);
+        console.log(`[Download] Resolved document URL for ${item.title}`);
         return resolved;
       }
     }
-
-    if (vkDocumentMatch && !hasSignedParameters) {
-      throw new Error("Impossible d'obtenir une URL de téléchargement directe depuis VK");
-    }
-    return item.url;
+    throw new Error("Impossible d'obtenir une URL de téléchargement directe depuis VK");
   };
 
   const completeIosDownload = async (item: DownloadItem, result: any) => {
@@ -493,7 +510,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     saveDownloadsToStorage(updated);
     resumablesRef.current.delete(item.id);
     startingRef.current.delete(item.id);
-    downloadUrlRefreshNeededRef.current.delete(item.id);
     clearRetryCount(item.id);
     clearSpeed(speedRef, item.id);
     NativeNotification.cancelNotification(item.id);
@@ -574,7 +590,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
           saveDownloadsToStorage(updated);
 
           startingRef.current.delete(item.id);
-          downloadUrlRefreshNeededRef.current.delete(item.id);
           clearRetryCount(item.id);
           clearSpeed(speedRef, item.id);
 
@@ -626,7 +641,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
               saveDownloadsToStorage(updated);
 
               startingRef.current.delete(item.id);
-              downloadUrlRefreshNeededRef.current.delete(item.id);
               clearRetryCount(item.id);
               clearSpeed(speedRef, item.id);
               NativeNotification.cancelNotification(item.id);
@@ -684,7 +698,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         ? `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${item.id}${dottedExt}`
         : `${dir}/${fileName}`;
 
-    upsertDownload(item.id, { status: "downloading", path: tempPath, resumeData: item.resumeData ?? null });
+    upsertDownload(item.id, { status: "downloading", path: tempPath, resumeData: item.resumeData ?? null, errorReason: undefined });
     clearSpeed(speedRef, item.id);
 
     // Android: Use Shared Surgical Method (Surgical Stream)
@@ -698,10 +712,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const isCanceled = err?.message?.includes('canceled') || err?.message?.includes('Canceled');
         if (!isCanceled) {
-          downloadUrlRefreshNeededRef.current.add(item.id);
-          const willRetry = scheduleAutoRetry(item.id, item.title);
-          if (!willRetry) {
-            upsertDownload(item.id, { status: "error", speed: "" });
+          const refusal = vkRefusalReason(err);
+          // Auto-retries only restart downloads in the "error" state; left in
+          // "downloading", the item stayed at 0% and kept its queue slot forever.
+          upsertDownload(item.id, {
+            status: "error",
+            speed: "",
+            ...(refusal ? { errorReason: refusal } : {}),
+          });
+          if (refusal || !scheduleAutoRetry(item.id, item.title)) {
             NativeNotification.cancelNotification(item.id);
             NativeNotification.showErrorNotification(item.id, item.title);
           }
@@ -754,6 +773,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       resumablesRef.current.delete(item.id);
       startingRef.current.delete(item.id);
       clearSpeed(speedRef, item.id);
+      const refusal = vkRefusalReason(err);
 
       setDownloads((prev) => {
         const d = prev.find(x => x.id === item.id);
@@ -761,14 +781,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const next = [...prev];
         const idx = next.findIndex(x => x.id === item.id);
         if (idx !== -1) {
-          next[idx] = { ...next[idx], status: 'error', speed: "" };
+          next[idx] = {
+            ...next[idx],
+            status: 'error',
+            speed: "",
+            ...(refusal ? { errorReason: refusal } : {}),
+          };
         }
         return next;
       });
 
       const isManualPause = item.status === 'paused';
-      if (!isManualPause) {
-        downloadUrlRefreshNeededRef.current.add(item.id);
+      if (!isManualPause && !refusal) {
         scheduleAutoRetry(item.id, item.title);
       }
     }
@@ -939,7 +963,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
           AsyncStorage.getItem(STORAGE_KEYS.hasFullSynced),
         ]);
         if (cancelled) return;
-        if (treeRaw) setSyncedData(JSON.parse(treeRaw));
+        if (treeRaw) {
+          const tree: VkNode[] = JSON.parse(treeRaw);
+          lastSavedSyncedDataRef.current = tree;
+          setSyncedData(tree);
+        }
         if (downloadsRaw) {
           const parsed: DownloadItem[] = JSON.parse(downloadsRaw);
           const normalized = await Promise.all(parsed.map(async (d) => {
@@ -992,12 +1020,30 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => { cancelled = true; };
   }, []);
 
+  // Serializing the whole catalog blocks the JS thread for a moment. Saving it
+  // after every opened folder made scrolling stutter, so it is saved when the
+  // app leaves the foreground, or after a long idle period as a backstop.
+  const syncedDataRef = useRef(syncedData);
+  syncedDataRef.current = syncedData;
+  const saveSyncedData = useCallback(() => {
+    const data = syncedDataRef.current;
+    if (!data || data === lastSavedSyncedDataRef.current) return;
+    lastSavedSyncedDataRef.current = data;
+    AsyncStorage.setItem(STORAGE_KEYS.syncedData, JSON.stringify(data)).catch(() => { });
+  }, []);
+
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (syncedData) AsyncStorage.setItem(STORAGE_KEYS.syncedData, JSON.stringify(syncedData));
-    }, 500);
-    return () => clearTimeout(t);
-  }, [syncedData]);
+    if (!syncedData || syncedData === lastSavedSyncedDataRef.current) return;
+    const handle = setTimeout(saveSyncedData, SYNCED_DATA_IDLE_SAVE_MS);
+    return () => clearTimeout(handle);
+  }, [syncedData, saveSyncedData]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") saveSyncedData();
+    });
+    return () => subscription.remove();
+  }, [saveSyncedData]);
 
   useEffect(() => {
     if (!isReady || !autoSync) return;
@@ -1010,7 +1056,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
+  // Save as soon as an item is added, removed or changes status; progress-only
+  // changes are saved at most every DOWNLOADS_SAVE_INTERVAL_MS.
+  const lastDownloadsSaveRef = useRef({ statusKey: "", at: 0 });
   useEffect(() => {
+    const statusKey = downloads.map((d) => `${d.id}:${d.status}`).join("|");
+    const now = Date.now();
+    const last = lastDownloadsSaveRef.current;
+    if (statusKey === last.statusKey && now - last.at < DOWNLOADS_SAVE_INTERVAL_MS) return;
+    lastDownloadsSaveRef.current = { statusKey, at: now };
     saveDownloadsToStorage(downloads);
   }, [downloads]);
 
@@ -1043,8 +1097,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, [rawCurrentNodes, debouncedQuery]);
 
+  // Walking and normalizing the whole catalog is only worth it while searching;
+  // otherwise every opened folder (a new syncedData) would rebuild it.
+  const isSearching = normalizeText(debouncedQuery).length > 0;
   const searchIndex = useMemo(() => {
-    if (!syncedData) return [];
+    if (!syncedData || !isSearching) return [];
     const index: Array<{ id: string; node: VkNode; normalizedTitle: string }> = [];
     const stack: VkNode[] = [...syncedData];
     const seenIds = new Set<string>();
@@ -1059,7 +1116,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
     return index;
-  }, [syncedData]);
+  }, [syncedData, isSearching]);
 
   const globalSearchNodes = useMemo(() => {
     const q = normalizeText(debouncedQuery);
@@ -1172,7 +1229,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         console.warn("Resume failed, will restart:", e);
         resumablesRef.current.delete(id);
         startingRef.current.delete(id);
-        downloadUrlRefreshNeededRef.current.add(id);
       }
     }
 
@@ -1184,7 +1240,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       await FileSystem.deleteAsync(current.path, { idempotent: true }).catch(() => undefined);
       resumablesRef.current.delete(id);
       startingRef.current.delete(id);
-      downloadUrlRefreshNeededRef.current.add(id);
       clearSpeed(speedRef, id);
       setDownloads(prev => prev.map(d => d.id === id ? {
         ...d,
@@ -1216,7 +1271,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         startingRef.current.delete(id); // Clean up on failure
         const isCanceled = e?.message?.includes('canceled') || e?.message?.includes('Canceled');
         if (!isCanceled) {
-          downloadUrlRefreshNeededRef.current.add(id);
           upsertDownload(id, { status: "error", speed: "" });
         }
       }
@@ -1245,7 +1299,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     startingRef.current.delete(id);
-    downloadUrlRefreshNeededRef.current.delete(id);
     clearSpeed(speedRef, id);
 
     // Cancel notification
@@ -1325,8 +1378,29 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     AsyncStorage.removeItem(STORAGE_KEYS.downloads);
   };
 
+  // Screens get wrappers with a fixed identity that call this render's functions,
+  // so memoized rows don't re-render on every progress tick and no caller keeps
+  // a stale copy of `downloads`.
+  const downloadActionsRef = useRef<DownloadActions | null>(null);
+  downloadActionsRef.current = {
+    addDownload, pauseDownload, resumeDownload, cancelDownload, removeDownload,
+    retryDownload, clearDownloads, downloadAll, cancelAll,
+  };
+  const downloadActions = useMemo<DownloadActions>(() => ({
+    addDownload: (node) => downloadActionsRef.current!.addDownload(node),
+    pauseDownload: (id) => downloadActionsRef.current!.pauseDownload(id),
+    resumeDownload: (id) => downloadActionsRef.current!.resumeDownload(id),
+    cancelDownload: (id, silent) => downloadActionsRef.current!.cancelDownload(id, silent),
+    removeDownload: (id) => downloadActionsRef.current!.removeDownload(id),
+    retryDownload: (id) => downloadActionsRef.current!.retryDownload(id),
+    clearDownloads: () => downloadActionsRef.current!.clearDownloads(),
+    downloadAll: (nodes) => downloadActionsRef.current!.downloadAll(nodes),
+    cancelAll: () => downloadActionsRef.current!.cancelAll(),
+  }), []);
+
   const resetLibrary = async () => {
-    await cancelAll();
+    // Through the stable wrapper: this function is memoized without `downloads`.
+    await downloadActions.cancelAll();
     setDownloads([]);
     await AsyncStorage.removeItem(STORAGE_KEYS.downloads);
     await clearCache();
@@ -1371,19 +1445,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const value = useMemo<AppDataContextType>(() => ({
     syncedData, navPath, isSyncing, isLoadingNode, error, searchQuery, setSearchQuery,
-    hasFullSynced, currentNodes, currentFolder, syncRoot, syncAll, resetLibrary, openNode, goHome, goUp, refreshCurrent, downloads,
-    addDownload, pauseDownload, resumeDownload, cancelDownload, removeDownload, retryDownload,
-    clearDownloads, downloadAll, cancelAll, clearCache, getDownloadDirUri, deleteLocalFile, globalSearchNodes,
+    hasFullSynced, currentNodes, currentFolder, syncRoot, syncAll, resetLibrary, openNode, goHome, goUp, refreshCurrent,
+    clearCache, getDownloadDirUri, deleteLocalFile, globalSearchNodes,
     readingFile, setReadingFile,
   }), [
     syncedData, navPath, isSyncing, isLoadingNode, error, searchQuery,
-    hasFullSynced, currentNodes, currentFolder, downloads, readingFile,
-    globalSearchNodes, token, isReady, autoSync, downloadPath
+    hasFullSynced, currentNodes, currentFolder, readingFile,
+    globalSearchNodes, token, groupId, topicId, isReady, autoSync, downloadPath, t, isTokenInvalid
   ]);
+
+  const downloadsValue = useMemo<DownloadsContextType>(
+    () => ({ downloads, ...downloadActions }),
+    [downloads, downloadActions],
+  );
 
   return (
     <AppDataContext.Provider value={value}>
-      {children}
+      <DownloadsContext.Provider value={downloadsValue}>
+        {children}
+      </DownloadsContext.Provider>
     </AppDataContext.Provider>
   );
 };
@@ -1391,5 +1471,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 export const useAppData = () => {
   const ctx = useContext(AppDataContext);
   if (!ctx) throw new Error("useAppData must be used within AppDataProvider");
+  return ctx;
+};
+
+export const useDownloads = () => {
+  const ctx = useContext(DownloadsContext);
+  if (!ctx) throw new Error("useDownloads must be used within AppDataProvider");
   return ctx;
 };

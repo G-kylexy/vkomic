@@ -45,5 +45,7 @@ export interface DownloadItem {
   vkOwnerId?: string;
   vkDocId?: string;
   vkAccessKey?: string;
+  // VK refused the file: storage error (HTTP 5xx) or "file unavailable or deleted" page.
+  errorReason?: "vkUnavailable" | "vkDeleted";
 }
 
