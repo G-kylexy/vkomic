@@ -81,6 +81,13 @@ export type Translations = {
     openExternal: string;
     externalError: string;
     noAppAvailable: string;
+    modePaged: string;
+    modeManga: string;
+    modeContinuous: string;
+    openError: string;
+    pageError: string;
+    retry: string;
+    pageOf: string;
   };
   downloads: {
     title: string;
@@ -188,6 +195,13 @@ const translations: Record<Language, Translations> = {
       openExternal: "Ouvrir avec une app externe",
       externalError: "Erreur",
       noAppAvailable: "Aucune application PDF disponible",
+      modePaged: "Page par page",
+      modeManga: "Manga (droite à gauche)",
+      modeContinuous: "Lecture continue",
+      openError: "Impossible de charger le PDF",
+      pageError: "Erreur de chargement",
+      retry: "Réessayer",
+      pageOf: "Page {page} sur {total}",
     },
     downloads: {
       title: "Téléchargements",
@@ -324,6 +338,13 @@ const translations: Record<Language, Translations> = {
       openExternal: "Open with external app",
       externalError: "Error",
       noAppAvailable: "No PDF app available",
+      modePaged: "Page by page",
+      modeManga: "Manga (right to left)",
+      modeContinuous: "Continuous scroll",
+      openError: "Could not load the PDF",
+      pageError: "Could not load this page",
+      retry: "Retry",
+      pageOf: "Page {page} of {total}",
     },
     downloads: {
       title: "Downloads",
@@ -460,6 +481,13 @@ const translations: Record<Language, Translations> = {
       openExternal: "Открыть во внешнем приложении",
       externalError: "Ошибка",
       noAppAvailable: "Нет приложения для PDF",
+      modePaged: "Постранично",
+      modeManga: "Манга (справа налево)",
+      modeContinuous: "Непрерывная прокрутка",
+      openError: "Не удалось открыть PDF",
+      pageError: "Ошибка загрузки",
+      retry: "Повторить",
+      pageOf: "Страница {page} из {total}",
     },
     downloads: {
       title: "Загрузки",

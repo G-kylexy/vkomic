@@ -23,6 +23,8 @@ interface ZoomablePageProps {
     onTap: () => void;
     onRetry?: () => void;
     themeColor?: string;
+    errorLabel?: string;
+    retryLabel?: string;
 }
 
 interface PatchState {
@@ -76,6 +78,8 @@ export const ZoomablePage: React.FC<ZoomablePageProps> = ({
     onTap,
     onRetry,
     themeColor = "#fff",
+    errorLabel = "Erreur de chargement",
+    retryLabel = "Réessayer",
 }) => {
     const scale = useSharedValue(1);
     const savedScale = useSharedValue(1);
@@ -336,10 +340,10 @@ export const ZoomablePage: React.FC<ZoomablePageProps> = ({
     if (error) {
         return (
             <View style={[styles.container, { width, height }]}>
-                <Text style={styles.errorText}>Erreur de chargement</Text>
+                <Text style={styles.errorText}>{errorLabel}</Text>
                 {onRetry && (
                     <View style={styles.retryBtn}>
-                        <Text style={styles.retryText} onPress={onRetry}>Réessayer</Text>
+                        <Text style={styles.retryText} onPress={onRetry}>{retryLabel}</Text>
                     </View>
                 )}
             </View>
