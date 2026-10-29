@@ -260,7 +260,7 @@ export const searchVkBoard = async (
         .filter((item: any) => item.title.toLowerCase().includes(lowerQuery))
         .map((item: any) => ({
           id: `topic_${item.id}`,
-          title: item.title,
+          title: decodeHtmlEntities(item.title),
           type: "genre",
           vkGroupId: effectiveGroupId,
           vkTopicId: item.id.toString(),
@@ -278,8 +278,19 @@ export const searchVkBoard = async (
 
 // --- LOGIQUE DE PARSING ---
 
+// VK API text fields are HTML-escaped: "Alys &amp; Vicky".
+const HTML_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+export const decodeHtmlEntities = (text: string) =>
+  text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity: string) => {
+    if (entity[0] === "#") {
+      const code = entity[1].toLowerCase() === "x" ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    }
+    return HTML_ENTITIES[entity.toLowerCase()] ?? match;
+  });
+
 const cleanTitle = (text: string) => {
-  let cleaned = text || "";
+  let cleaned = decodeHtmlEntities(text || "");
   const embeddedTitle = cleaned.match(/\[topic-\d+(?:_\d+)?\|([^\]]+)\]/i);
   if (embeddedTitle) {
     cleaned = embeddedTitle[1];
@@ -671,7 +682,7 @@ const extractDocuments = (items: any[]): VkNode[] => {
 
       nodes.push({
         id: `doc_${documentKey}`,
-        title: doc.title,
+        title: decodeHtmlEntities(String(doc.title ?? "")),
         type: "file",
         extension: doc.ext?.toLowerCase?.() || undefined,
         url,
