@@ -24,9 +24,9 @@ struct VkTokenResponse {
     error_description: Option<String>,
 }
 
-fn validate_oauth_value(name: &str, value: &str, max_len: usize) -> Result<(), String> {
+fn validate_oauth_value(_name: &str, value: &str, max_len: usize) -> Result<(), String> {
     if value.is_empty() || value.len() > max_len || value.chars().any(char::is_whitespace) {
-        return Err(format!("Paramètre OAuth invalide : {name}"));
+        return Err("Données de connexion invalides. Veuillez réessayer.".to_string());
     }
     Ok(())
 }
@@ -40,29 +40,29 @@ async fn parse_token_response(
     let data: VkTokenResponse = response
         .json()
         .await
-        .map_err(|_| "Réponse VK ID illisible".to_string())?;
+        .map_err(|_| "Réponse de VK invalide. Veuillez réessayer.".to_string())?;
 
     if !status.is_success() || data.error.is_some() {
         return Err(data
             .error_description
             .or(data.error)
-            .unwrap_or_else(|| "VK ID a refusé la connexion".to_string()));
+            .unwrap_or_else(|| "La connexion a été refusée par VK.".to_string()));
     }
     if data
         .state
         .as_deref()
         .is_some_and(|state| state != expected_state)
     {
-        return Err("La réponse VK ID ne correspond pas à la demande".to_string());
+        return Err("La session de connexion a expiré. Veuillez réessayer.".to_string());
     }
 
     Ok(VkAuthSession {
         access_token: data
             .access_token
-            .ok_or_else(|| "VK ID n'a pas renvoyé de jeton d'accès".to_string())?,
+            .ok_or_else(|| "Impossible de finaliser la connexion avec VK.".to_string())?,
         refresh_token: data
             .refresh_token
-            .ok_or_else(|| "VK ID n'a pas renvoyé de jeton de renouvellement".to_string())?,
+            .ok_or_else(|| "Impossible d'enregistrer la session VK. Veuillez réessayer.".to_string())?,
         device_id: data
             .device_id
             .unwrap_or_else(|| fallback_device_id.to_string()),
@@ -98,7 +98,7 @@ pub async fn exchange_code(
         .body(format!("code={}", urlencoding::encode(&code)))
         .send()
         .await
-        .map_err(|_| "Impossible de joindre VK ID".to_string())?;
+        .map_err(|_| "Impossible de joindre VK. Vérifiez votre connexion Internet.".to_string())?;
 
     parse_token_response(response, &state, &device_id).await
 }
@@ -131,7 +131,7 @@ pub async fn refresh_token(
         ))
         .send()
         .await
-        .map_err(|_| "Impossible de joindre VK ID".to_string())?;
+        .map_err(|_| "Impossible de joindre VK. Vérifiez votre connexion Internet.".to_string())?;
 
     parse_token_response(response, &state, &device_id).await
 }

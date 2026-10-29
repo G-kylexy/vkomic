@@ -31,6 +31,22 @@ interface DownloadsViewProps {
 // Nombre d'items chargés initialement et à chaque scroll
 const ITEMS_PER_BATCH = 50;
 
+// Why a failed download stopped: VK refusing the file, or the message the hook stored.
+const errorDetail = (d: DownloadItem, t: Translations) =>
+  d.errorReason === "vkUnavailable"
+    ? t.downloads.errorVkUnavailable
+    : d.errorReason === "vkDeleted"
+      ? t.downloads.errorVkDeleted
+      : !d.speed || d.speed === "0 MB/s" || d.speed === "Erreur" || d.speed === "Error"
+        ? ""
+        : d.speed === "Interrompu"
+          ? t.downloads.errorInterrupted
+          : d.speed === "Dossier non configuré"
+            ? t.downloads.errorNoFolder
+            : d.speed === "Erreur de réinitialisation"
+              ? t.downloads.errorReset
+              : d.speed;
+
 interface RowProps {
   d: DownloadItem;
   t: Translations;
@@ -56,6 +72,7 @@ const DownloadRow = React.memo(({
   const isDownloading = d.status === "downloading";
   const isPaused = d.status === "paused";
   const isCanceled = d.status === "canceled";
+  const isError = d.status === "error";
 
   // Derived values computed during render
   const dateLabel = formatDateISO(d.createdAt);
@@ -86,6 +103,16 @@ const DownloadRow = React.memo(({
             <X size={16} strokeWidth={3} />
             {t.downloads.canceled}
           </div>
+        ) : isError ? (
+          <div>
+            <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wide">
+              <X size={16} strokeWidth={3} />
+              {t.downloads.statusError}
+            </div>
+            {errorDetail(d, t) && (
+              <div className="mt-1 text-xs text-slate-400 max-w-xs">{errorDetail(d, t)}</div>
+            )}
+          </div>
         ) : (
           <div className="w-full">
             <div className="flex justify-between items-end mb-1">
@@ -113,14 +140,14 @@ const DownloadRow = React.memo(({
       </td>
       <td className="py-4 px-6 border-b border-slate-800/50 text-right">
         <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-          {isCanceled ? (
+          {isCanceled || isError ? (
             <button
               onClick={() => retryDownload(d.id)}
               className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 flex items-center gap-2 text-xs font-bold transition-colors"
-              title={t.downloads.redownload}
+              title={isError ? t.downloads.retry : t.downloads.redownload}
             >
               <RefreshCw size={14} />
-              <span className="hidden lg:inline">{t.downloads.redownload}</span>
+              <span className="hidden lg:inline">{isError ? t.downloads.retry : t.downloads.redownload}</span>
             </button>
           ) : !isCompleted ? (
             <>
@@ -165,6 +192,7 @@ const DownloadCard = React.memo(({
   const isDownloading = d.status === "downloading";
   const isPaused = d.status === "paused";
   const isCanceled = d.status === "canceled";
+  const isError = d.status === "error";
 
   // Derived values computed during render
   const dateLabel = formatDateISO(d.createdAt);
@@ -173,16 +201,17 @@ const DownloadCard = React.memo(({
 
   const statusLabel = isCompleted ? t.downloads.completed
     : isCanceled ? t.downloads.canceled
-      : isPaused ? t.downloads.statusPaused
-        : isDownloading ? t.downloads.statusDownloading
-          : t.downloads.statusPending;
+      : isError ? t.downloads.statusError
+        : isPaused ? t.downloads.statusPaused
+          : isDownloading ? t.downloads.statusDownloading
+            : t.downloads.statusPending;
 
   const statusTone = isCompleted ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
-    : isCanceled ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
+    : isCanceled || isError ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
       : isPaused ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
         : "text-blue-400 bg-blue-500/10 border-blue-500/30";
 
-  const showProgress = !isCompleted && !isCanceled;
+  const showProgress = !isCompleted && !isCanceled && !isError;
 
   return (
     <div className="bg-[#0f1523] border border-[#1e293b] rounded-xl p-4 shadow-lg">
@@ -201,11 +230,15 @@ const DownloadCard = React.memo(({
 
       <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
         <span className="font-mono">{displaySize}</span>
-        {!isCompleted && !isCanceled && d.speed && d.speed !== "0 MB/s" && (
+        {!isCompleted && !isCanceled && !isError && d.speed && d.speed !== "0 MB/s" && (
           <span className="text-blue-400 font-mono">{d.speed}</span>
         )}
         <span className="font-mono">{d.progress}%</span>
       </div>
+
+      {isError && errorDetail(d, t) && (
+        <div className="mt-2 text-xs text-rose-300">{errorDetail(d, t)}</div>
+      )}
 
       {showProgress && (
         <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -217,10 +250,10 @@ const DownloadCard = React.memo(({
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {isCanceled ? (
+        {isCanceled || isError ? (
           <button onClick={() => retryDownload(d.id)} className="flex-1 min-w-[140px] px-3 py-2 rounded-lg bg-slate-800 text-slate-200 border border-slate-700/50 text-sm font-semibold flex items-center justify-center gap-2">
             <RefreshCw size={14} />
-            <span>{t.downloads.redownload}</span>
+            <span>{isError ? t.downloads.retry : t.downloads.redownload}</span>
           </button>
         ) : !isCompleted ? (
           <>

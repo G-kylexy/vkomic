@@ -1,6 +1,14 @@
 import { Translations } from "./fr";
 
 export const en: Translations = {
+  // Common actions
+  common: {
+    loading: "Loading…",
+    cancel: "Cancel",
+    confirm: "Confirm",
+    later: "Later",
+  },
+
   // Navigation
   nav: {
     home: "Home",
@@ -11,106 +19,122 @@ export const en: Translations = {
 
   // TopBar
   topbar: {
-    searchPlaceholder: "Search...",
+    searchPlaceholder: "Search…",
   },
 
   // Sidebar status
   sidebar: {
     connected: "Connected",
-    disconnected: "Disconnected",
-    lastSync: "Last synchronization",
+    disconnected: "Not signed in",
+    lastSync: "Last synced",
     connectedToVK: "Connected to VK",
-    signedIn: "Signed in with VK ID",
+    signedIn: "Signed in to VK",
     syncFailed: "Sync failed",
     updateAvailable: "Update available",
-    checkingUpdates: "Checking index...",
-    syncDone: "Index up to date",
+    checkingUpdates: "Updating catalog…",
+    syncDone: "Catalog up to date",
   },
 
   // Settings
   settings: {
     title: "Settings",
-    subtitle: "Application and VK connection configuration",
+    subtitle: "Manage your VK account and app preferences",
 
     // VK Connection
-    vkConnection: "VK Connection",
-    vkIdConnected: "Connected with VK ID",
-    vkIdDisconnected: "Not connected to VK ID",
-    connectVk: "Continue with VK ID",
+    vkConnection: "VK Account",
+    vkIdConnected: "Signed in to VK",
+    vkIdDisconnected: "Not signed in",
+    connectVk: "Sign in with VK ID",
     reconnectVk: "Reconnect",
-    disconnectVk: "Disconnect",
-    vkIdPending: "Sign-in is open in your browser. Vkomic will return to the foreground automatically.",
-    vkIdFinishing: "Connecting…",
-    vkIdHelp: "Use the VK ID integration registered by Vkomic; no App ID or token needs to be entered.",
-    vkIdPrivacy: "Vkomic requests only the document access required for synchronization.",
-    vkAuthError: "Unable to connect to VK ID",
+    disconnectVk: "Sign out",
+    vkIdPending:
+      "The sign-in page opened in your browser. Vkomic will return to the foreground automatically.",
+    vkIdFinishing: "Signing in…",
+    vkIdHelp: "Opens the official VK ID sign-in page in your browser.",
+    vkIdPrivacy:
+      "Vkomic only reads the public catalog — nothing is posted or changed on your account.",
+    vkAuthError: "Couldn't sign in",
     groupId: "Group ID",
     topicId: "Topic ID",
-    resetGroupDefaults: "Reset",
+    resetGroupDefaults: "Restore defaults",
 
     // General Preferences
     generalPreferences: "General Preferences",
-    language: "Interface Language",
-    downloadFolder: "Download Folder",
+    language: "App language",
+    downloadFolder: "Download folder",
     browse: "Browse",
     folderDialogWarning:
-      "Folder selection is only available in the desktop app. Please enter the path manually.",
+      "Couldn't open the folder picker. You can type the path manually.",
 
     // Save button
     saveAll: "Save",
-    saved: "Changes Saved",
+    saved: "Changes saved",
 
     // Data Management
-    dataManagement: "Data Management",
-    resetDatabase: "Reset Database",
+    dataManagement: "Local Data",
+    resetDatabase: "Reset catalog",
     resetDatabaseDescription:
-      "Clears the local VK tree cache. Useful if the app seems out of sync or shows empty folders.",
+      "Clears the cached catalog on this device. Useful if folders appear empty or out of sync.",
     resetButton: "Reset",
     resetWarning:
-      "Warning: You will need to perform a new sync to access content.",
+      "This will clear the cached catalog (your downloaded files won't be deleted). You'll need to sync again to browse comics.",
   },
 
   // Library
   library: {
-    empty: "Empty Library",
-    emptyDescription: "Sync the app with VK index to access comics.",
-    syncButton: "Sync from VK",
-    syncAllButton: "Sync everything",
+    empty: "Catalog not synced",
+    emptyDescription:
+      "Sign in to VK in Settings, then sync to browse comics.",
+    syncButton: "Sync catalog",
+    syncAllButton: "Sync all",
     syncAllWarning:
-      "This operation uses several calls from Vkomic's shared VK API quota to preload folders. Run it only when needed.",
-    syncing: "Syncing...",
-    searching: "Searching in library...",
-    noResults: "This folder is empty or nothing matches your search.",
+      "Preloads all folders at once. Avoid running this too often so you don't hit VK rate limits.",
+    syncing: "Syncing…",
+    searching: "Search results",
+    noResults: "This folder is empty.",
+    noSearchResults: "No results found",
+    noSearchResultsDescription:
+      "This folder might not be synced yet. Would you like to search directly on VK?",
+    searchOnVk: "Search on VK",
     localTitle: "Local Library",
     noDownloadPath:
-      "Choose a download folder in Settings to browse your files here.",
+      "Choose a download folder in Settings to find your files here.",
     desktopOnly:
-      "Local browsing is only available inside the desktop application.",
-    readError: "Unable to read this folder. Please verify the selected path.",
-    loading: "Loading your library...",
-    back: "Parent folder",
+      "The local library is only available in the desktop app.",
+    readError:
+      "Couldn't open this folder. Make sure the path still exists.",
+    loading: "Loading your library…",
+    back: "Back",
     refresh: "Refresh",
     rootLabel: "Downloads",
     folderLabel: "Folder",
     fileLabel: "File",
+    filesLabel: "Files",
+    activeInQueue: "active",
+    nodeTypes: {
+      category: "Category",
+      genre: "Genre",
+      series: "Series",
+      topic: "Topic",
+    },
     size: "Size",
     modified: "Modified",
-    openFolder: "Open folder",
-    openFolderOnVk: "view on VK",
+    openFolder: "Open",
+    openFolderOnVk: "View on VK",
     openFile: "Open file",
     downloadFile: "Download",
-    downloadAll: "Download All",
-    cancelAll: "Cancel All",
+    downloadAll: "Download all",
+    cancelAll: "Cancel all",
     emptyFolder: "This folder is empty.",
-    configureFolder: "Configure Folder",
+    configureFolder: "Choose folder",
   },
 
   // Downloads
   downloads: {
     title: "Downloads",
     overviewTitle: "Overview",
-    statsIndexed: "INDEXED SERIES",
-    statsDownloaded: "VOLUMES DOWNLOADED",
+    statsIndexed: "SERIES IN CATALOG",
+    statsDownloaded: "DOWNLOADED VOLUMES",
     statsInProgress: "IN PROGRESS",
     tableSeries: "Series",
     tableVolume: "Volume",
@@ -120,35 +144,64 @@ export const en: Translations = {
     tableActions: "Actions",
     completed: "Downloaded",
     canceled: "Canceled",
-    redownload: "Redownload",
+    redownload: "Download again",
     noDownloads: "No downloads yet",
-    noDownloadsDescription: "Your download history will appear here.",
-    statusDownloading: "Downloading...",
-    statusPending: "Pending",
+    noDownloadsDescription:
+      "Your active and completed downloads will appear here.",
+    statusDownloading: "Downloading…",
+    statusPending: "Queued",
     statusPaused: "Paused",
+    statusError: "Failed",
+    errorVkUnavailable:
+      "This file is temporarily unavailable on VK. Try again later.",
+    errorVkDeleted:
+      "This file is no longer available or has been deleted on VK.",
+    errorInterrupted: "Download interrupted.",
+    errorNoFolder: "No download folder selected.",
+    errorReset: "Couldn't restart the download.",
+    noFolderAlert: "Please choose a download folder in Settings first.",
+    retry: "Try again",
   },
 
   // VK errors
   errors: {
-    vkNotConnected: "Sign in with VK ID in Settings to sync.",
-    vkSessionExpired: "Your VK session has expired. Sign in again with VK ID in Settings.",
-    vkRateLimited: "VK is temporarily limiting requests. Try again in a few minutes.",
-    vkAccessDenied: "VK denies this account access to this content.",
-    vkAccountBlocked: "This VK account has been blocked or deleted by VK.",
-    vkAppNotApproved: "VK does not allow this feature for the Vkomic app yet.",
-    vkUnavailable: "Unable to reach VK. Check your connection and try again.",
+    vkNotConnected:
+      "Sign in to your VK account in Settings to sync the catalog.",
+    vkSessionExpired:
+      "Your VK session expired. Please sign in again in Settings.",
+    vkRateLimited:
+      "Too many requests to VK. Please wait a few minutes and try again.",
+    vkAccessDenied: "Your VK account doesn't have access to this content.",
+    vkAccountBlocked: "This VK account is blocked or deactivated.",
+    vkAppNotApproved:
+      "This feature isn't available for Vkomic on VK yet.",
+    vkUnavailable:
+      "Couldn't reach VK. Check your internet connection and try again.",
   },
 
   // Tooltips
   tooltips: {
     home: "Home",
-    resetDatabase: "Reset database",
-    clean: "Clean",
+    sync: "Sync",
+    resetDatabase: "Reset catalog",
+    clean: "Clear list",
     resume: "Resume",
     pause: "Pause",
     cancel: "Cancel",
-    resetDownload: "Reset download",
-    openFolder: "Open folder",
+    resetDownload: "Restart",
+    openFolder: "Show in folder",
+  },
+
+  // Update Modal
+  update: {
+    titleLine1: "Update",
+    titleLine2: "available",
+    whatsNew: "What's new",
+    defaultNotes: "Stability improvements and bug fixes.",
+    downloadingProgress: "Downloading…",
+    restartNow: "Restart now",
+    downloadingButton: "Downloading…",
+    downloadUpdate: "Download update",
   },
 
   // Languages

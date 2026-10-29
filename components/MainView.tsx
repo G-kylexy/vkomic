@@ -5,6 +5,7 @@ const SettingsView = React.lazy(() => import("./SettingsView"));
 const DownloadsView = React.lazy(() => import("./DownloadsView"));
 const LibraryView = React.lazy(() => import("./LibraryView"));
 import { VkNode, VkConnectionStatus, DownloadItem } from "../types";
+import { useTranslation } from "../i18n";
 
 interface MainViewProps {
   searchQuery: string;
@@ -71,13 +72,14 @@ const MainView: React.FC<MainViewProps> = ({
   resetDownload,
   clearDownloads,
 }) => {
+  const { t } = useTranslation();
   const [navPath, setNavPath] = useState<VkNode[]>([]);
 
   const loadingFallback = (
     <div className="flex-1 flex items-center justify-center text-slate-400">
       <div className="flex items-center gap-3 text-sm">
         <span className="inline-block h-4 w-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
-        Chargement...
+        {t.common.loading}
       </div>
     </div>
   );

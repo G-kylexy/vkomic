@@ -165,7 +165,7 @@ const App: React.FC = () => {
       const callback = parseVkCallback(rawUrl);
       const pending = readPendingVkAuthorization(callback.state);
       if (!pending) {
-        throw new Error("La demande VK ID a expiré. Relance la connexion depuis les paramètres.");
+        throw new Error("La connexion a expiré. Réessayez depuis les paramètres.");
       }
       const session = await tauriVk.exchangeAuthCode(
         callback.code,

@@ -66,4 +66,7 @@ export const TranslationProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useTranslation = () => useContext(TranslationContext);
 
+export const getCurrentTranslations = (): Translations =>
+  translations[getInitialLanguage()] ?? fr;
+
 export const availableLanguages = translations;

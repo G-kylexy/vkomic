@@ -70,4 +70,6 @@ export interface DownloadItem {
   path?: string; // Local save path
   extension?: string;
   subFolder?: string;
+  // VK refused the file: storage error (HTTP 5xx) or "file unavailable or deleted" page.
+  errorReason?: "vkUnavailable" | "vkDeleted";
 }

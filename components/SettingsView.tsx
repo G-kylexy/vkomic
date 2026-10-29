@@ -335,7 +335,7 @@ const SettingsView: React.FC<
                     onClick={() => setShowResetConfirm(false)}
                     className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition-colors"
                   >
-                    Annuler
+                    {t.common.cancel}
                   </button>
                   <button
                     onClick={() => {
@@ -346,7 +346,7 @@ const SettingsView: React.FC<
                     }}
                     className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold transition-colors"
                   >
-                    Confirmer
+                    {t.common.confirm}
                   </button>
                 </div>
               </div>

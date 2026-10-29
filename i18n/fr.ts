@@ -1,4 +1,12 @@
 export const fr = {
+  // Common actions
+  common: {
+    loading: "Chargement…",
+    cancel: "Annuler",
+    confirm: "Confirmer",
+    later: "Plus tard",
+  },
+
   // Navigation
   nav: {
     home: "Accueil",
@@ -9,92 +17,107 @@ export const fr = {
 
   // TopBar
   topbar: {
-    searchPlaceholder: "Rechercher...",
+    searchPlaceholder: "Rechercher…",
   },
 
   // Sidebar status
   sidebar: {
     connected: "Connecté",
-    disconnected: "Déconnecté",
+    disconnected: "Non connecté",
     lastSync: "Dernière synchronisation",
     connectedToVK: "Connecté à VK",
-    signedIn: "Connecté avec VK ID",
-    syncFailed: "Synchronisation impossible",
+    signedIn: "Compte VK connecté",
+    syncFailed: "Échec de la synchronisation",
     updateAvailable: "Mise à jour disponible",
-    checkingUpdates: "Vérification des index...",
-    syncDone: "Index à jour",
+    checkingUpdates: "Mise à jour du catalogue…",
+    syncDone: "Catalogue à jour",
   },
 
   // Settings
   settings: {
     title: "Paramètres",
-    subtitle: "Configuration de l'application et de la connexion VK",
+    subtitle: "Gérez votre compte VK et vos préférences",
 
     // VK Connection
     vkConnection: "Connexion VK",
-    vkIdConnected: "Connecté avec VK ID",
-    vkIdDisconnected: "Non connecté à VK ID",
-    connectVk: "Continuer avec VK ID",
-    reconnectVk: "Reconnecter",
-    disconnectVk: "Déconnecter",
-    vkIdPending: "Connexion ouverte dans ton navigateur. Vkomic reviendra automatiquement au premier plan.",
-    vkIdFinishing: "Connexion…",
-    vkIdHelp: "Utilise l’intégration VK ID enregistrée par Vkomic ; aucun App ID ni token n'est à saisir.",
-    vkIdPrivacy: "Vkomic demande uniquement l'accès aux documents nécessaires à la synchronisation.",
-    vkAuthError: "Connexion VK ID impossible",
+    vkIdConnected: "Connecté à VK",
+    vkIdDisconnected: "Non connecté",
+    connectVk: "Se connecter avec VK ID",
+    reconnectVk: "Se reconnecter",
+    disconnectVk: "Se déconnecter",
+    vkIdPending:
+      "La page de connexion s'est ouverte dans votre navigateur. Vkomic reviendra automatiquement au premier plan.",
+    vkIdFinishing: "Connexion en cours…",
+    vkIdHelp:
+      "La connexion s'ouvre dans votre navigateur via la page officielle VK ID.",
+    vkIdPrivacy:
+      "Vkomic consulte uniquement le catalogue public : rien n'est publié ni modifié sur votre compte.",
+    vkAuthError: "Impossible de se connecter",
     groupId: "ID du groupe",
-    topicId: "ID du topic",
-    resetGroupDefaults: "Par défaut",
+    topicId: "ID du sujet",
+    resetGroupDefaults: "Valeurs par défaut",
 
     // General Preferences
     generalPreferences: "Préférences générales",
-    language: "Langue de l'interface",
+    language: "Langue de l'application",
     downloadFolder: "Dossier de téléchargement",
     browse: "Parcourir",
     folderDialogWarning:
-      "La sélection de dossier est disponible uniquement dans la version bureau. Veuillez saisir le chemin manuellement.",
+      "Impossible d'ouvrir le sélecteur de dossier. Vous pouvez saisir le chemin manuellement.",
 
     // Save button
-    saveAll: "Sauvegarder",
+    saveAll: "Enregistrer",
     saved: "Modifications enregistrées",
 
     // Data Management
-    dataManagement: "Gestion des données",
-    resetDatabase: "Réinitialiser la base de données",
+    dataManagement: "Données locales",
+    resetDatabase: "Réinitialiser le catalogue",
     resetDatabaseDescription:
-      "Efface le cache local de l'arborescence VK. Utile si l'application semble désynchronisée ou affiche des dossiers vides.",
+      "Efface le catalogue enregistré sur cet appareil. Utile si certains dossiers semblent vides ou ne sont plus à jour.",
     resetButton: "Réinitialiser",
     resetWarning:
-      "Attention : Vous devrez effectuer une nouvelle synchronisation pour accéder au contenu.",
+      "Le catalogue en cache sera effacé (vos fichiers téléchargés seront conservés). Vous devrez relancer une synchronisation.",
   },
 
   // Library
   library: {
-    empty: "Bibliothèque vide",
+    empty: "Catalogue non synchronisé",
     emptyDescription:
-      "Connectez-vous avec VK ID dans les Paramètres, puis synchronisez l'application avec l’index VK pour accéder aux BDs.",
-    syncButton: "Synchroniser depuis VK",
+      "Connectez-vous à VK dans les Paramètres, puis lancez une synchronisation pour parcourir les BD.",
+    syncButton: "Synchroniser le catalogue",
     syncAllButton: "Tout synchroniser",
     syncAllWarning:
-      "Cette opération consomme plusieurs appels du quota VK API partagé de Vkomic pour précharger les dossiers. Lancez-la uniquement lorsque c’est nécessaire.",
-    syncing: "Synchronisation...",
-    searching: "Recherche dans la bibliothèque...",
-    noResults: "Ce dossier est vide ou aucun résultat trouvé.",
+      "Précharge tous les dossiers d'un coup. Évitez de lancer cette action trop souvent pour ne pas dépasser les limites de VK.",
+    syncing: "Synchronisation…",
+    searching: "Résultats de recherche",
+    noResults: "Ce dossier est vide.",
+    noSearchResults: "Aucun résultat",
+    noSearchResultsDescription:
+      "Ce dossier n'a peut-être pas encore été synchronisé. Voulez-vous chercher directement sur VK ?",
+    searchOnVk: "Rechercher sur VK",
     localTitle: "Bibliothèque locale",
     noDownloadPath:
-      "Choisissez un dossier de téléchargement dans Paramètres pour afficher vos fichiers ici.",
+      "Choisissez un dossier de téléchargement dans les Paramètres pour retrouver vos fichiers ici.",
     desktopOnly:
-      "La bibliothèque locale est disponible uniquement dans l'application desktop.",
+      "La bibliothèque locale est disponible uniquement sur l'application de bureau.",
     readError:
-      "Impossible de lire ce dossier. Vérifiez que le chemin est valide.",
-    loading: "Chargement de votre bibliothèque...",
+      "Impossible d'ouvrir ce dossier. Vérifiez que son emplacement existe toujours.",
+    loading: "Chargement de la bibliothèque…",
     back: "Retour",
-    refresh: "Rafraîchir",
+    refresh: "Actualiser",
     rootLabel: "Téléchargements",
     folderLabel: "Dossier",
     fileLabel: "Fichier",
+    filesLabel: "Fichiers",
+    activeInQueue: "en cours",
+    nodeTypes: {
+      category: "Catégorie",
+      genre: "Genre",
+      series: "Série",
+      topic: "Sujet",
+    },
     size: "Taille",
-    modified: "Modifié",
+    modified: "Modifié le",
     openFolder: "Ouvrir",
     openFolderOnVk: "Voir sur VK",
     openFile: "Ouvrir le fichier",
@@ -102,53 +125,83 @@ export const fr = {
     downloadAll: "Tout télécharger",
     cancelAll: "Tout annuler",
     emptyFolder: "Ce dossier est vide.",
-    configureFolder: "Configurer le dossier",
+    configureFolder: "Choisir un dossier",
   },
 
   // Downloads
   downloads: {
     title: "Téléchargements",
     overviewTitle: "Vue d'ensemble",
-    statsIndexed: "SÉRIES INDEXÉES",
+    statsIndexed: "SÉRIES AU CATALOGUE",
     statsDownloaded: "TOMES TÉLÉCHARGÉS",
     statsInProgress: "EN COURS",
     tableSeries: "Série",
     tableVolume: "Tome",
-    tableStatus: "Statut",
+    tableStatus: "État",
     tableDate: "Date",
     tableSize: "Taille",
     tableActions: "Actions",
     completed: "Téléchargé",
     canceled: "Annulé",
     redownload: "Retélécharger",
-    noDownloads: "Aucun téléchargement effectué",
-    noDownloadsDescription: "L'historique des téléchargements apparaîtra ici.",
-    statusDownloading: "Téléchargement...",
+    noDownloads: "Aucun téléchargement",
+    noDownloadsDescription:
+      "Vos téléchargements en cours et terminés s'afficheront ici.",
+    statusDownloading: "Téléchargement…",
     statusPending: "En attente",
-    statusPaused: "Pause",
+    statusPaused: "En pause",
+    statusError: "Échec",
+    errorVkUnavailable:
+      "Ce fichier est temporairement indisponible sur VK. Réessayez plus tard.",
+    errorVkDeleted:
+      "Ce fichier n'est plus disponible ou a été supprimé sur VK.",
+    errorInterrupted: "Téléchargement interrompu.",
+    errorNoFolder: "Aucun dossier de téléchargement sélectionné.",
+    errorReset: "Impossible de recommencer le téléchargement.",
+    noFolderAlert:
+      "Veuillez d'abord choisir un dossier de téléchargement dans les Paramètres.",
+    retry: "Réessayer",
   },
 
   // VK errors
   errors: {
-    vkNotConnected: "Connectez-vous avec VK ID dans les Paramètres pour synchroniser.",
-    vkSessionExpired: "Votre session VK a expiré. Reconnectez-vous avec VK ID dans les Paramètres.",
-    vkRateLimited: "VK limite temporairement les requêtes. Réessayez dans quelques minutes.",
-    vkAccessDenied: "VK refuse l'accès à ce contenu pour ce compte.",
-    vkAccountBlocked: "Ce compte VK a été bloqué ou supprimé par VK.",
-    vkAppNotApproved: "VK n'autorise pas encore cette fonction pour l'application Vkomic.",
-    vkUnavailable: "Impossible de contacter VK. Vérifiez votre connexion puis réessayez.",
+    vkNotConnected:
+      "Connectez-vous à votre compte VK dans les Paramètres pour synchroniser le catalogue.",
+    vkSessionExpired:
+      "Votre session VK a expiré. Reconnectez-vous dans les Paramètres.",
+    vkRateLimited:
+      "Trop de requêtes envoyées à VK. Patientez quelques minutes avant de réessayer.",
+    vkAccessDenied: "Votre compte VK n'a pas accès à ce contenu.",
+    vkAccountBlocked: "Ce compte VK est bloqué ou désactivé.",
+    vkAppNotApproved:
+      "Cette fonctionnalité n'est pas encore disponible pour Vkomic sur VK.",
+    vkUnavailable:
+      "Impossible de joindre VK. Vérifiez votre connexion Internet et réessayez.",
   },
 
   // Tooltips
   tooltips: {
     home: "Accueil",
-    resetDatabase: "Réinitialiser la base de données",
-    clean: "Nettoyer",
+    sync: "Synchroniser",
+    resetDatabase: "Réinitialiser le catalogue",
+    clean: "Vider la liste",
     resume: "Reprendre",
     pause: "Pause",
     cancel: "Annuler",
-    resetDownload: "Réinitialiser le téléchargement",
+    resetDownload: "Recommencer",
     openFolder: "Ouvrir le dossier",
+  },
+
+  // Update Modal
+  update: {
+    titleLine1: "Mise à jour",
+    titleLine2: "disponible",
+    whatsNew: "Nouveautés",
+    defaultNotes: "Améliorations de stabilité et corrections de bugs.",
+    downloadingProgress: "Téléchargement…",
+    restartNow: "Redémarrer maintenant",
+    downloadingButton: "Téléchargement en cours…",
+    downloadUpdate: "Télécharger la mise à jour",
   },
 
   // Languages
