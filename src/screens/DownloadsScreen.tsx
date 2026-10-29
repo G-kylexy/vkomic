@@ -132,6 +132,9 @@ const DownloadCard = React.memo<DownloadCardProps>(({
             <Text style={[styles.statusBadgeText, { color: p.danger }]}>{t.downloads.statusError}</Text>
           </View>
         )}
+        {item.status === 'error' && item.errorReason === 'vkUnavailable' && (
+          <Text style={styles.errorDetail}>{t.downloads.errorVkUnavailable}</Text>
+        )}
 
         {item.status === 'canceled' && (
           <View style={styles.statusBadge}>
@@ -549,6 +552,7 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     progressFill: { height: "100%", borderRadius: 3 },
     statusBadge: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm },
     statusBadgeText: { fontSize: 11, fontWeight: "900" },
+    errorDetail: { color: p.subtle, fontSize: 12, marginTop: 4 },
     cardActions: { marginTop: spacing.sm, flexDirection: "row", justifyContent: "flex-end" },
     actionGroup: { flexDirection: "row", gap: 8 },
     miniBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: p.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: `${p.border}80` },

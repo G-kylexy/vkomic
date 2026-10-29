@@ -45,5 +45,6 @@ export interface DownloadItem {
   vkOwnerId?: string;
   vkDocId?: string;
   vkAccessKey?: string;
+  errorReason?: "vkUnavailable"; // VK's storage refused the file (HTTP 5xx)
 }
 

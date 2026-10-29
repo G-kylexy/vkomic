@@ -93,6 +93,7 @@ export type Translations = {
     statusInProgress: string;
     statusCanceled: string;
     statusError: string;
+    errorVkUnavailable: string;
     emptyTitle: string;
     emptySubtitle: string;
     actionPause: string;
@@ -196,6 +197,7 @@ const translations: Record<Language, Translations> = {
       statusInProgress: "En cours",
       statusCanceled: "Annulé",
       statusError: "Erreur",
+      errorVkUnavailable: "VK ne fournit pas ce fichier pour l'instant. Réessaie plus tard.",
       emptyTitle: "Aucun téléchargement",
       emptySubtitle: "Lance un téléchargement depuis l'onglet Accueil.",
       actionPause: "Pause",
@@ -328,6 +330,7 @@ const translations: Record<Language, Translations> = {
       statusInProgress: "In progress",
       statusCanceled: "Canceled",
       statusError: "Error",
+      errorVkUnavailable: "VK is not serving this file right now. Try again later.",
       emptyTitle: "No downloads",
       emptySubtitle: "Start a download from the Home tab.",
       actionPause: "Pause",
@@ -460,6 +463,7 @@ const translations: Record<Language, Translations> = {
       statusInProgress: "В процессе",
       statusCanceled: "Отменено",
       statusError: "Ошибка",
+      errorVkUnavailable: "VK сейчас не отдаёт этот файл. Попробуй позже.",
       emptyTitle: "Загрузок нет",
       emptySubtitle: "Запусти загрузку во вкладке Главная.",
       actionPause: "Пауза",

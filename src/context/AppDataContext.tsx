@@ -149,6 +149,11 @@ const validateIosDownload = async (result: any, item: DownloadItem) => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// VK's file storage answers some files with an instant 5xx "temporarily
+// unavailable" page, for days at a time: retrying straight away cannot help.
+const isVkStorageUnavailable = (error: unknown) =>
+  error instanceof Error && /HTTP Error: 5\d\d\b/.test(error.message);
+
 // Anyone can post on the VK board: never save files that install or run when opened.
 const BLOCKED_EXTENSIONS = new Set([
   "aab", "apk", "apks", "app", "bat", "cmd", "dmg", "exe", "hta", "ipa", "jar", "js", "lnk",
@@ -684,7 +689,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         ? `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${item.id}${dottedExt}`
         : `${dir}/${fileName}`;
 
-    upsertDownload(item.id, { status: "downloading", path: tempPath, resumeData: item.resumeData ?? null });
+    upsertDownload(item.id, { status: "downloading", path: tempPath, resumeData: item.resumeData ?? null, errorReason: undefined });
     clearSpeed(speedRef, item.id);
 
     // Android: Use Shared Surgical Method (Surgical Stream)
@@ -698,10 +703,16 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const isCanceled = err?.message?.includes('canceled') || err?.message?.includes('Canceled');
         if (!isCanceled) {
-          downloadUrlRefreshNeededRef.current.add(item.id);
-          const willRetry = scheduleAutoRetry(item.id, item.title);
-          if (!willRetry) {
-            upsertDownload(item.id, { status: "error", speed: "" });
+          const vkUnavailable = isVkStorageUnavailable(err);
+          // Auto-retries only restart downloads in the "error" state; left in
+          // "downloading", the item stayed at 0% and kept its queue slot forever.
+          upsertDownload(item.id, {
+            status: "error",
+            speed: "",
+            ...(vkUnavailable ? { errorReason: "vkUnavailable" as const } : {}),
+          });
+          if (!vkUnavailable) downloadUrlRefreshNeededRef.current.add(item.id);
+          if (vkUnavailable || !scheduleAutoRetry(item.id, item.title)) {
             NativeNotification.cancelNotification(item.id);
             NativeNotification.showErrorNotification(item.id, item.title);
           }
@@ -754,6 +765,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       resumablesRef.current.delete(item.id);
       startingRef.current.delete(item.id);
       clearSpeed(speedRef, item.id);
+      const vkUnavailable = isVkStorageUnavailable(err);
 
       setDownloads((prev) => {
         const d = prev.find(x => x.id === item.id);
@@ -761,13 +773,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         const next = [...prev];
         const idx = next.findIndex(x => x.id === item.id);
         if (idx !== -1) {
-          next[idx] = { ...next[idx], status: 'error', speed: "" };
+          next[idx] = {
+            ...next[idx],
+            status: 'error',
+            speed: "",
+            ...(vkUnavailable ? { errorReason: "vkUnavailable" as const } : {}),
+          };
         }
         return next;
       });
 
       const isManualPause = item.status === 'paused';
-      if (!isManualPause) {
+      if (!isManualPause && !vkUnavailable) {
         downloadUrlRefreshNeededRef.current.add(item.id);
         scheduleAutoRetry(item.id, item.title);
       }
