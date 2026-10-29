@@ -68,10 +68,10 @@ const parseTokenResponse = async (
 ): Promise<VkAuthSession> => {
   const data = (await response.json()) as VkTokenResponse;
   if (!response.ok || data.error || !data.access_token || !data.refresh_token) {
-    throw new Error(data.error_description || data.error || "VK ID a refusé la connexion.");
+    throw new Error(data.error_description || data.error || "La connexion a été refusée par VK.");
   }
   if (data.state && data.state !== expectedState) {
-    throw new Error("La réponse VK ID ne correspond pas à la demande de connexion.");
+    throw new Error("La session de connexion a expiré. Veuillez réessayer.");
   }
 
   const expiresIn = Math.max(Number(data.expires_in || 3600), 60);

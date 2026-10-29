@@ -480,8 +480,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
     } catch (error) {
       if (error instanceof SafError && error.type === SafErrorType.NO_APP_AVAILABLE) {
         Alert.alert(
-          "Aucune application",
-          "Aucune application n'est disponible pour ouvrir ce type de fichier."
+          t.library.noAppForFileTitle,
+          t.library.noAppForFileMsg
         );
         return;
       }
@@ -497,7 +497,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
       await Sharing.shareAsync(fileUri, {
         UTI: "public.data",
         mimeType: "application/octet-stream",
-        dialogTitle: `Ouvrir ${file.name}`,
+        dialogTitle: t.library.openDialogTitle.replace("{name}", file.name),
       });
     } catch (e) {
       console.error("Failed to share file", e);
@@ -566,7 +566,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
       await Sharing.shareAsync(fileUri, {
         UTI: "public.data",
         mimeType: mimeType,
-        dialogTitle: `Partager ${file.name}`,
+        dialogTitle: t.library.shareDialogTitle.replace("{name}", file.name),
       });
     } catch (e) {
       console.error("Failed to share file", e);
@@ -726,7 +726,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
                 </View>
                 <Text style={[styles.emptyText, { fontSize: 16, color: p.text, marginTop: 16 }]}>{t.library.empty || "Aucun fichier trouvé"}</Text>
                 <Text style={[styles.subtitle, { textAlign: 'center', maxWidth: '80%', marginTop: 8 }]}>
-                  Vos fichiers PDF, CBZ et CBR apparaîtront ici.
+                  {t.library.emptySubtitle}
                 </Text>
               </View>
             )

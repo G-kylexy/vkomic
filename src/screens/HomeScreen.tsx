@@ -17,7 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 
 import { TabId } from "../components/BottomNav";
-import { getT } from "../i18n";
+import { getT, formatFilesCount, formatResultsCount } from "../i18n";
 import { useAppData, useDownloads } from "../context/AppDataContext";
 import { useVk } from "../context/VkContext";
 import { useVkSignIn } from "../hooks/useVkSignIn";
@@ -274,7 +274,7 @@ const FileRow = memo<FileRowProps>(({
                   color={accent.accentBright}
                 />
                 <Text style={[styles.splitBtnText, { color: accent.accentBright }]}>
-                  {d.status === "paused" ? t.downloads.statusResume || "Reprendre" : "Pause"}
+                  {d.status === "paused" ? t.downloads.actionResume : t.downloads.actionPause}
                 </Text>
               </Pressable>
               <View style={styles.splitDivider} />
@@ -511,7 +511,7 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
       return (
         <View style={styles.fileBoxTop}>
           <View style={styles.fileBoxHeader}>
-            <Text style={styles.fileBoxTitle}>{fileNodes.length} {t.nav.downloads.toLowerCase()}</Text>
+            <Text style={styles.fileBoxTitle}>{formatFilesCount(fileNodes.length, language)}</Text>
             <Pressable
               onPress={() => void (isAnyFileActive ? cancelAll() : downloadAll(fileNodes))}
               style={({ pressed }) => [styles.bulkBtn, isAnyFileActive && { backgroundColor: `${p.danger}15` }, pressed && { opacity: 0.7 }]}
@@ -548,7 +548,7 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
       </View>
     );
   }, [
-    styles, p, accent, t, openNode, fileNodes, isAnyFileActive, findDownloadState, openLibrary,
+    styles, p, accent, t, language, openNode, fileNodes, isAnyFileActive, findDownloadState, openLibrary,
     addDownload, pauseDownload, resumeDownload, cancelDownload, cancelAll, downloadAll, setReadingFile,
   ]);
 
@@ -726,7 +726,7 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
                   <View style={styles.searchCountRow}>
                     <Ionicons name="search" size={12} color={p.primaryBright} />
                     <Text style={styles.searchCountText}>
-                      {displayNodes.length} {t.browser.results || "résultat(s)"}
+                      {formatResultsCount(displayNodes.length, language)}
                     </Text>
                   </View>
                 )}
