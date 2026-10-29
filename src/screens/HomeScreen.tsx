@@ -19,6 +19,7 @@ import { TabId } from "../components/BottomNav";
 import { getT } from "../i18n";
 import { useAppData } from "../context/AppDataContext";
 import { useVk } from "../context/VkContext";
+import { useVkSignIn } from "../hooks/useVkSignIn";
 import { palette as defaultPalette, radius, spacing, tabAccents } from "../theme";
 import { VkNode, DownloadItem } from "../types";
 
@@ -142,8 +143,6 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     loadingCard: { backgroundColor: p.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: `${p.border}80`, padding: spacing.lg, alignItems: "center", gap: 10, minWidth: 200 },
     loadingText: { color: p.muted, fontWeight: "800" },
     loadingIndicator: { color: a.accentBright },
-    stepsContainer: { gap: 6, marginVertical: 6 },
-    stepText: { color: p.muted, fontSize: 13, lineHeight: 20, fontWeight: "600" },
   });
 };
 
@@ -297,6 +296,7 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
   onNavigate,
 }) => {
   const { token, language, activePalette: p } = useVk();
+  const { signIn, isSigningIn } = useVkSignIn();
   const { width: screenWidth } = useWindowDimensions();
   const t = getT(language);
   const accent = tabAccents.home;
@@ -535,14 +535,20 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
         {!token && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>{t.browser.noTokenTitle}</Text>
-            <View style={styles.stepsContainer}>
-              <Text style={styles.stepText}>{t.browser.setupStep1}</Text>
-              <Text style={styles.stepText}>{t.browser.setupStep2}</Text>
-              <Text style={styles.stepText}>{t.browser.setupStep3}</Text>
-            </View>
-            <Pressable style={styles.primaryCta} onPress={() => onNavigate?.("settings")}>
-              <Ionicons name="settings-outline" size={16} color={p.background === "#F5F1E8" ? p.text : "#fff"} />
-              <Text style={styles.primaryCtaText}>{t.browser.goSettings}</Text>
+            <Text style={styles.emptySubtitle}>{t.browser.noTokenSubtitle}</Text>
+            <Pressable
+              style={[styles.primaryCta, isSigningIn && { opacity: 0.65 }]}
+              onPress={() => void signIn()}
+              disabled={isSigningIn}
+            >
+              {isSigningIn ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="logo-vk" size={16} color={p.background === "#F5F1E8" ? p.text : "#fff"} />
+              )}
+              <Text style={styles.primaryCtaText}>
+                {isSigningIn ? t.settings.signingIn : t.settings.signIn}
+              </Text>
             </Pressable>
           </View>
         )}

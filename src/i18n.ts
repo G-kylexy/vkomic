@@ -44,8 +44,13 @@ export type Translations = {
   settings: {
     connectionTitle: string;
     connectionSubtitle: string;
-    tokenLabel: string;
-    tokenHint: string;
+    signIn: string;
+    signingIn: string;
+    connected: string;
+    logout: string;
+    signInFailed: string;
+    signInIncomplete: string;
+    signInUnknownError: string;
     groupLabel: string;
     topicLabel: string;
     prefsTitle: string;
@@ -110,7 +115,6 @@ export type Translations = {
     open: string;
     noTokenTitle: string;
     noTokenSubtitle: string;
-    goSettings: string;
     emptyTitle: string;
     emptySubtitle: string;
     searchEmptyTitle: string;
@@ -127,9 +131,6 @@ export type Translations = {
     errorAccountBlocked: string;
     errorAppNotApproved: string;
     results: string;
-    setupStep1: string;
-    setupStep2: string;
-    setupStep3: string;
   };
 };
 
@@ -207,9 +208,14 @@ const translations: Record<Language, Translations> = {
     },
     settings: {
       connectionTitle: "Connexion VK",
-      connectionSubtitle: "Renseigne tes identifiants",
-      tokenLabel: "Access token",
-      tokenHint: "Cliquez ici pour obtenir votre token VK",
+      connectionSubtitle: "Connexion sécurisée avec VK ID",
+      signIn: "Se connecter avec VK",
+      signingIn: "Connexion…",
+      connected: "Connecté à VK",
+      logout: "Déconnexion",
+      signInFailed: "Connexion VK impossible",
+      signInIncomplete: "La réponse de VK ID est incomplète ou ne correspond pas à la demande.",
+      signInUnknownError: "Une erreur inconnue est survenue.",
       groupLabel: "Group ID",
       topicLabel: "Topic ID",
       prefsTitle: "Préférences",
@@ -241,16 +247,15 @@ const translations: Record<Language, Translations> = {
       home: "Accueil",
       download: "Télécharger",
       open: "Ouvrir",
-      noTokenTitle: "Token VK manquant",
-      noTokenSubtitle: "Renseigne ton token dans Paramètres pour accéder à VK.",
-      goSettings: "Aller aux paramètres",
+      noTokenTitle: "Connecte-toi à VK",
+      noTokenSubtitle: "La page de connexion VK s'ouvre. Si l'app VK te demande de revenir au navigateur, reviens simplement dans Vkomic.",
       emptyTitle: "Bibliothèque vide",
       emptySubtitle: "Synchronise l'index VK pour afficher les dossiers et fichiers.",
       searchEmptyTitle: "Aucun résultat",
       searchEmptySubtitle: "Aucun contenu ne correspond à ta recherche.",
       searchIndexHint: "Index partiel : lance « Tout synchroniser » pour une recherche complète.",
       loading: "Chargement…",
-      errorNoToken: "Connecte-toi avec VK ID dans Paramètres.",
+      errorNoToken: "Connecte-toi avec VK pour synchroniser.",
       errorSync: "Impossible de synchroniser (VK API).",
       errorLoad: "Impossible de charger le contenu.",
       errorNoUrl: "Ce fichier n'a pas d'URL de téléchargement.",
@@ -260,9 +265,6 @@ const translations: Record<Language, Translations> = {
       errorAccountBlocked: "Ce compte VK a été bloqué ou supprimé par VK.",
       errorAppNotApproved: "VK n'autorise pas encore cette fonction pour l'application Vkomic.",
       results: "résultat(s)",
-      setupStep1: "1. Allez dans les Paramètres",
-      setupStep2: "2. Cliquez sur le bouton d'obtention de token",
-      setupStep3: "3. Copiez le token (URL) et collez-le ici",
     },
   },
   en: {
@@ -338,9 +340,14 @@ const translations: Record<Language, Translations> = {
     },
     settings: {
       connectionTitle: "VK connection",
-      connectionSubtitle: "Enter your credentials",
-      tokenLabel: "Access token",
-      tokenHint: "Click here to get your VK token",
+      connectionSubtitle: "Secure sign-in with VK ID",
+      signIn: "Sign in with VK",
+      signingIn: "Signing in…",
+      connected: "Connected to VK",
+      logout: "Sign out",
+      signInFailed: "VK sign-in failed",
+      signInIncomplete: "VK ID returned an incomplete or mismatched response.",
+      signInUnknownError: "An unknown error occurred.",
       groupLabel: "Group ID",
       topicLabel: "Topic ID",
       prefsTitle: "Preferences",
@@ -372,16 +379,15 @@ const translations: Record<Language, Translations> = {
       home: "Home",
       download: "Download",
       open: "Open",
-      noTokenTitle: "Missing VK token",
-      noTokenSubtitle: "Set your token in Settings to access VK.",
-      goSettings: "Go to settings",
+      noTokenTitle: "Sign in to VK",
+      noTokenSubtitle: "The VK sign-in page opens. If the VK app asks you to return to the browser, just come back to Vkomic.",
       emptyTitle: "Empty library",
       emptySubtitle: "Sync the VK index to display folders and files.",
       searchEmptyTitle: "No results",
       searchEmptySubtitle: "No content matches your search.",
       searchIndexHint: "Partial index: run “Sync all” for complete search.",
       loading: "Loading…",
-      errorNoToken: "Sign in with VK ID in Settings.",
+      errorNoToken: "Sign in with VK to sync.",
       errorSync: "Sync failed (VK API).",
       errorLoad: "Unable to load content.",
       errorNoUrl: "This file has no download URL.",
@@ -391,9 +397,6 @@ const translations: Record<Language, Translations> = {
       errorAccountBlocked: "This VK account has been blocked or deleted by VK.",
       errorAppNotApproved: "VK does not allow this feature for the Vkomic app yet.",
       results: "results",
-      setupStep1: "1. Go to Settings",
-      setupStep2: "2. Click on the get token button",
-      setupStep3: "3. Copy the token (URL) and paste it here",
     },
   },
   ru: {
@@ -469,9 +472,14 @@ const translations: Record<Language, Translations> = {
     },
     settings: {
       connectionTitle: "Подключение VK",
-      connectionSubtitle: "Введите данные",
-      tokenLabel: "Access token",
-      tokenHint: "Нажмите здесь, чтобы получить токен VK",
+      connectionSubtitle: "Безопасный вход через VK ID",
+      signIn: "Войти через VK",
+      signingIn: "Вход…",
+      connected: "Подключено к VK",
+      logout: "Выйти",
+      signInFailed: "Не удалось войти через VK",
+      signInIncomplete: "Ответ VK ID неполный или не соответствует запросу.",
+      signInUnknownError: "Произошла неизвестная ошибка.",
       groupLabel: "Group ID",
       topicLabel: "Topic ID",
       prefsTitle: "Настройки",
@@ -503,16 +511,15 @@ const translations: Record<Language, Translations> = {
       home: "Главная",
       download: "Скачать",
       open: "Открыть",
-      noTokenTitle: "Нет токена VK",
-      noTokenSubtitle: "Укажите токен в настройках, чтобы получить доступ к VK.",
-      goSettings: "Открыть настройки",
+      noTokenTitle: "Войдите в VK",
+      noTokenSubtitle: "Откроется страница входа VK. Если приложение VK попросит вернуться в браузер, просто вернитесь в Vkomic.",
       emptyTitle: "Библиотека пуста",
       emptySubtitle: "Синхронизируйте индекс VK, чтобы увидеть папки и файлы.",
       searchEmptyTitle: "Ничего не найдено",
       searchEmptySubtitle: "По вашему запросу ничего не найдено.",
       searchIndexHint: "Индекс частичный: запусти «Полную синхронизацию» для полного поиска.",
       loading: "Загрузка…",
-      errorNoToken: "Войдите через VK ID в настройках.",
+      errorNoToken: "Войдите через VK, чтобы синхронизировать.",
       errorSync: "Не удалось синхронизировать (VK API).",
       errorLoad: "Не удалось загрузить содержимое.",
       errorNoUrl: "У этого файла нет URL для скачивания.",
@@ -522,9 +529,6 @@ const translations: Record<Language, Translations> = {
       errorAccountBlocked: "Этот аккаунт VK заблокирован или удалён.",
       errorAppNotApproved: "VK пока не разрешает эту функцию для приложения Vkomic.",
       results: "результат(ов)",
-      setupStep1: "1. Перейдите в настройки",
-      setupStep2: "2. Нажмите кнопку получения токена",
-      setupStep3: "3. Скопируйте токен (URL) и вставьте его сюда",
     },
   },
 };
