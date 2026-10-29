@@ -21,6 +21,7 @@ object PanelDetector {
     private const val MIN_GUTTER = 0.006 // gutter thickness, fraction of the page width
     private const val MIN_PANEL_AREA = 0.015 // fraction of the page area
     private const val MIN_PANEL_SIDE = 0.06 // fraction of the page width or height
+    private const val MIN_CONTENT_AREA = 0.004 // smaller, outside the panels: a page number
     private const val MAX_DEPTH = 8
 
     /**
@@ -99,20 +100,46 @@ object PanelDetector {
 
         cut(0, 0, width, height, true, 0)
 
-        val kept = panels
-            .filter { (x0, y0, x1, y1) ->
-                val w = x1 - x0
-                val h = y1 - y0
-                w.toLong() * h >= MIN_PANEL_AREA * width * height &&
-                    w >= MIN_PANEL_SIDE * width && h >= MIN_PANEL_SIDE * height
-            }
-            .map { (x0, y0, x1, y1) ->
-                doubleArrayOf(
-                    x0.toDouble() / width, y0.toDouble() / height,
-                    (x1 - x0).toDouble() / width, (y1 - y0).toDouble() / height,
-                )
-            }
-        return if (kept.size >= 2) kept else emptyList()
+        fun area(r: IntArray) = (r[2] - r[0]).toLong() * (r[3] - r[1])
+        fun union(a: IntArray, b: IntArray) =
+            intArrayOf(minOf(a[0], b[0]), minOf(a[1], b[1]), maxOf(a[2], b[2]), maxOf(a[3], b[3]))
+        fun isSmall(r: IntArray) = area(r) < MIN_PANEL_AREA * width * height ||
+            r[2] - r[0] < MIN_PANEL_SIDE * width || r[3] - r[1] < MIN_PANEL_SIDE * height
+
+        // Tiny pieces outside the area the real panels cover (page numbers in the
+        // margin) go. Every other small piece, such as a caption without a frame
+        // that the cut splits line by line, joins the neighbour in reading order
+        // that grows least, so its text is shown with its picture.
+        val big = panels.filterNot { isSmall(it) }
+        if (big.isEmpty()) return emptyList()
+        val bx0 = big.minOf { it[0] }
+        val by0 = big.minOf { it[1] }
+        val bx1 = big.maxOf { it[2] }
+        val by1 = big.maxOf { it[3] }
+        fun inside(r: IntArray): Boolean {
+            val cx = (r[0] + r[2]) / 2
+            val cy = (r[1] + r[3]) / 2
+            return cx in bx0..bx1 && cy in by0..by1
+        }
+
+        val kept = panels.filter { area(it) >= MIN_CONTENT_AREA * width * height || inside(it) }.toMutableList()
+        while (kept.size > 1) {
+            val i = kept.indexOfFirst { isSmall(it) }
+            if (i < 0) break
+            val j = listOf(i - 1, i + 1)
+                .filter { it in kept.indices }
+                .minBy { area(union(kept[i], kept[it])) }
+            kept[j] = union(kept[i], kept[j])
+            kept.removeAt(i)
+        }
+
+        val result = kept.map { (x0, y0, x1, y1) ->
+            doubleArrayOf(
+                x0.toDouble() / width, y0.toDouble() / height,
+                (x1 - x0).toDouble() / width, (y1 - y0).toDouble() / height,
+            )
+        }
+        return if (result.size >= 2) result else emptyList()
     }
 
     private fun borderMedian(luminance: IntArray, width: Int, height: Int): Int {
