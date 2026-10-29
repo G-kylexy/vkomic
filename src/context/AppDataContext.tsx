@@ -32,7 +32,15 @@ type AppDataContextType = {
   goHome: () => void;
   goUp: (index?: number) => void;
   refreshCurrent: () => Promise<void>;
-  downloads: DownloadItem[];
+  clearCache: () => Promise<void>;
+  getDownloadDirUri: () => string | null;
+  deleteLocalFile: (uri: string) => Promise<void>;
+  globalSearchNodes: VkNode[];
+  readingFile: { uri: string; title: string; isConverted?: boolean } | null;
+  setReadingFile: (file: { uri: string; title: string; isConverted?: boolean } | null) => void;
+};
+
+type DownloadActions = {
   addDownload: (node: VkNode) => Promise<void>;
   pauseDownload: (id: string) => Promise<void>;
   resumeDownload: (id: string) => Promise<void>;
@@ -42,15 +50,17 @@ type AppDataContextType = {
   clearDownloads: () => Promise<void>;
   downloadAll: (nodes: VkNode[]) => Promise<void>;
   cancelAll: () => Promise<void>;
-  clearCache: () => Promise<void>;
-  getDownloadDirUri: () => string | null;
-  deleteLocalFile: (uri: string) => Promise<void>;
-  globalSearchNodes: VkNode[];
-  readingFile: { uri: string; title: string; isConverted?: boolean } | null;
-  setReadingFile: (file: { uri: string; title: string; isConverted?: boolean } | null) => void;
 };
 
+// Downloads live in their own context: progress ticks every 400 ms would
+// otherwise re-render every screen, hidden tabs included.
+type DownloadsContextType = DownloadActions & { downloads: DownloadItem[] };
+
 const AppDataContext = createContext<AppDataContextType | null>(null);
+const DownloadsContext = createContext<DownloadsContextType | null>(null);
+
+// Progress ticks would rewrite the saved list several times a second.
+const DOWNLOADS_SAVE_INTERVAL_MS = 5000;
 
 
 const isSafUri = (uri: string) => uri?.startsWith("content://");
@@ -1027,7 +1037,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
+  // Save as soon as an item is added, removed or changes status; progress-only
+  // changes are saved at most every DOWNLOADS_SAVE_INTERVAL_MS.
+  const lastDownloadsSaveRef = useRef({ statusKey: "", at: 0 });
   useEffect(() => {
+    const statusKey = downloads.map((d) => `${d.id}:${d.status}`).join("|");
+    const now = Date.now();
+    const last = lastDownloadsSaveRef.current;
+    if (statusKey === last.statusKey && now - last.at < DOWNLOADS_SAVE_INTERVAL_MS) return;
+    lastDownloadsSaveRef.current = { statusKey, at: now };
     saveDownloadsToStorage(downloads);
   }, [downloads]);
 
@@ -1342,8 +1360,29 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     AsyncStorage.removeItem(STORAGE_KEYS.downloads);
   };
 
+  // Screens get wrappers with a fixed identity that call this render's functions,
+  // so memoized rows don't re-render on every progress tick and no caller keeps
+  // a stale copy of `downloads`.
+  const downloadActionsRef = useRef<DownloadActions | null>(null);
+  downloadActionsRef.current = {
+    addDownload, pauseDownload, resumeDownload, cancelDownload, removeDownload,
+    retryDownload, clearDownloads, downloadAll, cancelAll,
+  };
+  const downloadActions = useMemo<DownloadActions>(() => ({
+    addDownload: (node) => downloadActionsRef.current!.addDownload(node),
+    pauseDownload: (id) => downloadActionsRef.current!.pauseDownload(id),
+    resumeDownload: (id) => downloadActionsRef.current!.resumeDownload(id),
+    cancelDownload: (id, silent) => downloadActionsRef.current!.cancelDownload(id, silent),
+    removeDownload: (id) => downloadActionsRef.current!.removeDownload(id),
+    retryDownload: (id) => downloadActionsRef.current!.retryDownload(id),
+    clearDownloads: () => downloadActionsRef.current!.clearDownloads(),
+    downloadAll: (nodes) => downloadActionsRef.current!.downloadAll(nodes),
+    cancelAll: () => downloadActionsRef.current!.cancelAll(),
+  }), []);
+
   const resetLibrary = async () => {
-    await cancelAll();
+    // Through the stable wrapper: this function is memoized without `downloads`.
+    await downloadActions.cancelAll();
     setDownloads([]);
     await AsyncStorage.removeItem(STORAGE_KEYS.downloads);
     await clearCache();
@@ -1388,19 +1427,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const value = useMemo<AppDataContextType>(() => ({
     syncedData, navPath, isSyncing, isLoadingNode, error, searchQuery, setSearchQuery,
-    hasFullSynced, currentNodes, currentFolder, syncRoot, syncAll, resetLibrary, openNode, goHome, goUp, refreshCurrent, downloads,
-    addDownload, pauseDownload, resumeDownload, cancelDownload, removeDownload, retryDownload,
-    clearDownloads, downloadAll, cancelAll, clearCache, getDownloadDirUri, deleteLocalFile, globalSearchNodes,
+    hasFullSynced, currentNodes, currentFolder, syncRoot, syncAll, resetLibrary, openNode, goHome, goUp, refreshCurrent,
+    clearCache, getDownloadDirUri, deleteLocalFile, globalSearchNodes,
     readingFile, setReadingFile,
   }), [
     syncedData, navPath, isSyncing, isLoadingNode, error, searchQuery,
-    hasFullSynced, currentNodes, currentFolder, downloads, readingFile,
-    globalSearchNodes, token, isReady, autoSync, downloadPath
+    hasFullSynced, currentNodes, currentFolder, readingFile,
+    globalSearchNodes, token, groupId, topicId, isReady, autoSync, downloadPath, t, isTokenInvalid
   ]);
+
+  const downloadsValue = useMemo<DownloadsContextType>(
+    () => ({ downloads, ...downloadActions }),
+    [downloads, downloadActions],
+  );
 
   return (
     <AppDataContext.Provider value={value}>
-      {children}
+      <DownloadsContext.Provider value={downloadsValue}>
+        {children}
+      </DownloadsContext.Provider>
     </AppDataContext.Provider>
   );
 };
@@ -1408,5 +1453,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 export const useAppData = () => {
   const ctx = useContext(AppDataContext);
   if (!ctx) throw new Error("useAppData must be used within AppDataProvider");
+  return ctx;
+};
+
+export const useDownloads = () => {
+  const ctx = useContext(DownloadsContext);
+  if (!ctx) throw new Error("useDownloads must be used within AppDataProvider");
   return ctx;
 };

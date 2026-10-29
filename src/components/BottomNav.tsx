@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { getT } from "../i18n";
 import { useVk } from "../context/VkContext";
-import { useAppData } from "../context/AppDataContext";
+import { useAppData, useDownloads } from "../context/AppDataContext";
 import { radius, spacing, tabAccents } from "../theme";
 
 type TabId = "home" | "library" | "downloads" | "settings";
@@ -33,7 +33,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
   const { language, activePalette: palette } = useVk();
   const t = getT(language);
-  const { downloads, goHome, setSearchQuery } = useAppData();
+  const { goHome, setSearchQuery } = useAppData();
+  const { downloads } = useDownloads();
 
   const effectiveDownloadsCount =
     typeof downloadsCount === "number"

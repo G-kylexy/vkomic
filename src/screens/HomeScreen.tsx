@@ -17,7 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { TabId } from "../components/BottomNav";
 import { getT } from "../i18n";
-import { useAppData } from "../context/AppDataContext";
+import { useAppData, useDownloads } from "../context/AppDataContext";
 import { useVk } from "../context/VkContext";
 import { useVkSignIn } from "../hooks/useVkSignIn";
 import { palette as defaultPalette, radius, spacing, tabAccents } from "../theme";
@@ -316,6 +316,10 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
     goUp,
     refreshCurrent,
     syncAll,
+    globalSearchNodes,
+    setReadingFile,
+  } = useAppData();
+  const {
     downloads,
     addDownload,
     pauseDownload,
@@ -323,9 +327,7 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
     cancelDownload,
     downloadAll,
     cancelAll,
-    globalSearchNodes,
-    setReadingFile,
-  } = useAppData();
+  } = useDownloads();
 
   // Ref to track navPath for BackHandler
   const navPathRef = useRef(navPath);

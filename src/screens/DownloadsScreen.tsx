@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 
-import { useAppData } from "../context/AppDataContext";
+import { useAppData, useDownloads } from "../context/AppDataContext";
 import { useVk } from "../context/VkContext";
 import * as FolderService from "../services/FolderService";
 import { getT } from "../i18n";
@@ -206,9 +206,9 @@ export const DownloadsScreen: React.FC = () => {
     cancelDownload,
     removeDownload,
     retryDownload,
-    setReadingFile,
     clearDownloads,
-  } = useAppData();
+  } = useDownloads();
+  const { setReadingFile } = useAppData();
 
   // État pour le dialogue de confirmation
   const [clearDialog, setClearDialog] = useState(false);
