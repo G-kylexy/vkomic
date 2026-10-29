@@ -290,7 +290,7 @@ export const SettingsScreen: React.FC = () => {
           </Pressable>
         </Section>
 
-        <Text style={styles.versionText}>VKomic v{Constants.expoConfig?.version ?? "1.5.0"}</Text>
+        <Text style={styles.versionText}>VKomic v{Constants.expoConfig?.version ?? "?"}</Text>
       </ScrollView>
 
       {/* Bouton Sauvegarder global */}
