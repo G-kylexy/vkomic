@@ -4,11 +4,15 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
+import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
+import android.view.WindowManager
 import com.facebook.react.bridge.*
 import kotlinx.coroutines.*
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -92,8 +96,48 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
         return dir
     }
 
-    private fun getDocId(uri: String): String {
-        return uri.hashCode().toString()
+    private fun openRendererFor(pfd: ParcelFileDescriptor): PdfRenderer {
+        try {
+            return PdfRenderer(pfd)
+        } catch (e: Exception) {
+            pfd.close()
+            throw e
+        }
+    }
+
+    /**
+     * Opens the PDF where it is. Documents from the storage access framework used
+     * to be copied whole into the cache before the first page could show (160 MB
+     * for a large album); their descriptor is seekable, so PdfRenderer reads them
+     * directly. Copying stays as the fallback for providers that only give pipes.
+     */
+    private fun openPdf(uri: String): Pair<ParcelFileDescriptor, PdfRenderer> {
+        if (!uri.startsWith("content://")) {
+            val file = if (uri.startsWith("file://")) File(uri.substring(7)) else File(uri)
+            if (!file.exists()) throw FileNotFoundException("PDF file not found: $uri")
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            return Pair(pfd, openRendererFor(pfd))
+        }
+
+        val contentUri = Uri.parse(uri)
+        val copy = File(getCacheDir(), "temp_source_${uri.hashCode()}.pdf")
+        try {
+            val pfd = reactContext.contentResolver.openFileDescriptor(contentUri, "r")
+                ?: throw FileNotFoundException("PDF file not found: $uri")
+            val renderer = openRendererFor(pfd)
+            copy.delete() // Left over from versions that always copied.
+            return Pair(pfd, renderer)
+        } catch (e: FileNotFoundException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot read $uri in place, copying it", e)
+        }
+
+        reactContext.contentResolver.openInputStream(contentUri)?.use { input ->
+            FileOutputStream(copy).use { output -> input.copyTo(output) }
+        } ?: throw FileNotFoundException("PDF file not found: $uri")
+        val pfd = ParcelFileDescriptor.open(copy, ParcelFileDescriptor.MODE_READ_ONLY)
+        return Pair(pfd, openRendererFor(pfd))
     }
 
     @ReactMethod
@@ -102,31 +146,11 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
             try {
                 closeDocumentInternal()
 
-                val docId = getDocId(uri)
-                val file = when {
-                    uri.startsWith("file://") -> File(uri.substring(7))
-                    uri.startsWith("content://") -> {
-                        val tempFile = File(getCacheDir(), "temp_source_$docId.pdf")
-                        val inputStream = reactContext.contentResolver.openInputStream(android.net.Uri.parse(uri))
-                        inputStream?.use { input ->
-                            FileOutputStream(tempFile).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                        tempFile
-                    }
-                    else -> File(uri)
-                }
-
-                if (!file.exists()) {
-                    promise.reject("FILE_NOT_FOUND", "PDF file not found: $uri")
-                    return@launch
-                }
-
-                Log.i(TAG, "Opening PDF: ${file.absolutePath}")
-                
-                val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = PdfRenderer(pfd)
+                Log.i(TAG, "Opening PDF: $uri")
+                val (pfd, renderer) = openPdf(uri)
+                // Rendered pages are cached per document. The size keeps a file
+                // downloaded again under the same URI from reusing stale pages.
+                val docId = "${uri.hashCode()}_${pfd.statSize}"
 
                 currentDocId = docId
                 currentPfd = pfd
@@ -164,6 +188,15 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
                     throw IllegalArgumentException("Page index out of bounds: $pageNum")
                 }
 
+                // Pages rendered earlier for this document and width are read back
+                // from disk: going back a page or reopening an album no longer
+                // renders everything again.
+                val cached = File(getCacheDir(), "${currentDocId ?: "unknown"}_page_${pageNum}_w${width}.jpg")
+                if (cached.length() > 0) {
+                    withContext(Dispatchers.Main) { promise.resolve(cached.absolutePath) }
+                    return@launch
+                }
+
                 // SYNCHRONIZED BLOCK:
                 // PdfRenderer is NOT thread-safe. We must ensure only ONE page is rendered at a time per document
                 val (absolutePath, success) = synchronized(renderer) {
@@ -171,30 +204,31 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
                     if (currentRenderer == null) {
                         Pair("", false)
                     } else {
-                        Log.i(TAG, "Extracting page $pageNum at width $width")
-
+                        val startedAt = SystemClock.elapsedRealtime()
                         val page = renderer.openPage(pageNum)
                         val aspectRatio = page.height.toDouble() / page.width.toDouble()
                         val height = (width * aspectRatio).toInt()
 
                         val bitmap = getBitmapFromPool(width, height)
-                        
+
                         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                         page.close()
+                        val renderedAt = SystemClock.elapsedRealtime()
 
-                        val docId = currentDocId ?: "unknown"
-                        // INCLUDE WIDTH IN FILENAME to separate thumb and HD caches!
-                        val cacheFile = File(getCacheDir(), "${docId}_page_${pageNum}_w${width}.webp")
-                        
-                        FileOutputStream(cacheFile).use { output ->
-                            // WebP LOSSY : ~30% plus petit que JPEG à qualité égale + décodage hardware Android
-                            bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 90, output)
+                        // JPEG: lossy WebP took several times longer to encode, and the
+                        // encode sits between rendering and showing the page. Written
+                        // under a temporary name so a killed app never leaves a
+                        // truncated page that the disk cache would serve.
+                        val partial = File(cached.path + ".part")
+                        FileOutputStream(partial).use { output ->
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
                         }
-                        
+                        partial.renameTo(cached)
+
                         releaseBitmapToPool(bitmap)
 
-                        Log.i(TAG, "Page $pageNum saved to: ${cacheFile.absolutePath}")
-                        Pair(cacheFile.absolutePath, true)
+                        Log.i(TAG, "Page $pageNum ${width}x$height: render ${renderedAt - startedAt} ms, encode ${SystemClock.elapsedRealtime() - renderedAt} ms")
+                        Pair(cached.absolutePath, true)
                     }
                 }
                 
@@ -274,17 +308,18 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
                         page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                         page.close()
 
-                        // Vérifier encore une fois avant la lourde opération d'écriture WebP
+                        // Vérifier encore une fois avant l'écriture de l'image
                         if (!isActive) {
                             releaseBitmapToPool(bitmap)
                             return@synchronized Pair("", false)
                         }
 
                         val docId = currentDocId ?: "unknown"
-                        val cacheFile = File(getCacheDir(), "${docId}_region_${pageNum}.webp")
+                        val cacheFile = File(getCacheDir(), "${docId}_region_${pageNum}.jpg")
 
+                        // JPEG for the same reason as whole pages: much faster to encode.
                         FileOutputStream(cacheFile).use { output ->
-                            bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 92, output)
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, output)
                         }
 
                         releaseBitmapToPool(bitmap)
@@ -302,6 +337,19 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
             } catch (e: Exception) {
                 Log.e(TAG, "extractPageRegion failed page $pageNum", e)
                 withContext(Dispatchers.Main) { promise.reject("EXTRACT_REGION_ERROR", e.message) }
+            }
+        }
+    }
+
+    /** Keeps the screen on while the reader is open. */
+    @ReactMethod
+    fun setKeepScreenOn(enabled: Boolean) {
+        val activity = getCurrentActivity() ?: return
+        activity.runOnUiThread {
+            if (enabled) {
+                activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         }
     }

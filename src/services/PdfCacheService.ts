@@ -10,8 +10,9 @@ export interface PdfDocumentInfo {
 
 class PdfCacheService {
     private cache: Map<number, string> = new Map();
-    // Limiter drastiquement pour ne pas saturer la RAM (OOM) avec des images HD (très grosses)
-    private maxCachedPages = 3;
+    // Only page file paths: a page dropped here is read back from the native disk
+    // cache. 5 = the visible page, 2 prefetched ahead, 1 behind, plus one spare.
+    private maxCachedPages = 5;
     private currentDocId: string | null = null;
     private totalPages: number = 0;
     private isDocumentOpen: boolean = false;
@@ -29,9 +30,10 @@ class PdfCacheService {
 
     calculateRenderWidth(screenWidth: number): number {
         const pixelRatio = PixelRatio.get();
-        // Résolution de base 2.0x la taille de l'écran (Supersampling de base).
-        // Restitué à 2.0x pour éviter le flou pendant que l'utilisateur déplace ses doigts.
-        this.renderWidth = Math.floor(screenWidth * pixelRatio * 2.0);
+        // 1.5x the screen's pixels: sharp at rest and acceptable while pinching,
+        // until the zoomed region is rendered on its own. 2x meant 4x the screen's
+        // pixels (about 28 MB per page bitmap) for every page turned.
+        this.renderWidth = Math.floor(screenWidth * pixelRatio * 1.5);
         return this.renderWidth;
     }
 
@@ -133,18 +135,25 @@ class PdfCacheService {
     }
 
     /**
-     * Pré-charge les pages voisines en HD silencieusement.
+     * Pré-charge silencieusement les pages suivantes (on lit surtout vers l'avant)
+     * et la précédente.
      */
-    prefetchAround(centerPage: number, screenWidth: number, count = 1) {
+    prefetchAround(centerPage: number, screenWidth: number, ahead = 2, behind = 1) {
         if (!this.isDocumentOpen) return;
-        for (let i = 1; i <= count; i++) {
+        for (let i = 1; i <= ahead; i++) {
             if (centerPage + i < this.totalPages) {
                 this.extractPage(centerPage + i, screenWidth).catch(() => { });
             }
+        }
+        for (let i = 1; i <= behind; i++) {
             if (centerPage - i >= 0) {
                 this.extractPage(centerPage - i, screenWidth).catch(() => { });
             }
         }
+    }
+
+    setKeepScreenOn(enabled: boolean) {
+        PdfPageExtractor?.setKeepScreenOn?.(enabled);
     }
 
     getCachedUri(pageNum: number): string | null {
