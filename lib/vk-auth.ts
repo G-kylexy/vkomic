@@ -96,7 +96,7 @@ export const parseVkCallback = (rawUrl: string): {
 } => {
   const url = new URL(rawUrl);
   if (url.protocol !== "vkomic:" || url.hostname !== "vk-auth") {
-    throw new Error("Lien de retour VK ID invalide.");
+    throw new Error("Lien de retour de connexion invalide.");
   }
   const error = url.searchParams.get("error");
   if (error) {
@@ -106,7 +106,7 @@ export const parseVkCallback = (rawUrl: string): {
   const deviceId = url.searchParams.get("device_id");
   const state = url.searchParams.get("state");
   if (!code || !deviceId || !state) {
-    throw new Error("Réponse VK ID incomplète.");
+    throw new Error("Réponse de connexion incomplète. Veuillez réessayer.");
   }
   return { code, deviceId, state };
 };

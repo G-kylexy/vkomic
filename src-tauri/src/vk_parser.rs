@@ -24,6 +24,7 @@ pub struct VkNode {
 }
 
 lazy_static! {
+    static ref RE_HTML_ENTITY: Regex = Regex::new(r"(?i)&(#x[0-9a-f]+|#\d+|[a-z]+);").unwrap();
     static ref RE_BBCODE_TITLE: Regex = Regex::new(r"\[topic-\d+(?:_\d+)?\|([^\]]+)\]").unwrap();
     static ref RE_CLEAN_1: Regex = Regex::new(r"\s*[-–—=]+[>→»]\s*.*$").unwrap();
     static ref RE_CLEAN_2: Regex = Regex::new(r"https?://.*$").unwrap();
@@ -46,11 +47,41 @@ lazy_static! {
     static ref RE_DOC_URL: Regex = Regex::new(r"https?://(?:[a-z0-9]+\.)?vk\.(?:com|ru)/doc(-?\d+)_(\d+)").unwrap();
 }
 
+/// VK API text fields are HTML-escaped: "Alys &amp; Vicky".
+pub fn decode_html_entities(text: &str) -> String {
+    RE_HTML_ENTITY
+        .replace_all(text, |caps: &regex::Captures| {
+            let entity = &caps[1];
+            let code_point = if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+                u32::from_str_radix(hex, 16).ok()
+            } else if let Some(decimal) = entity.strip_prefix('#') {
+                decimal.parse::<u32>().ok()
+            } else {
+                None
+            };
+            let decoded = match code_point {
+                Some(code) => char::from_u32(code).filter(|c| *c != '\0').map(String::from),
+                None => match entity.to_ascii_lowercase().as_str() {
+                    "amp" => Some("&".to_string()),
+                    "lt" => Some("<".to_string()),
+                    "gt" => Some(">".to_string()),
+                    "quot" => Some("\"".to_string()),
+                    "apos" => Some("'".to_string()),
+                    "nbsp" => Some(" ".to_string()),
+                    _ => None,
+                },
+            };
+            decoded.unwrap_or_else(|| caps[0].to_string())
+        })
+        .into_owned()
+}
+
 pub fn clean_title(text: &str) -> String {
-    let mut cleaned = text.to_string();
+    let decoded = decode_html_entities(text);
+    let mut cleaned = decoded.clone();
 
     // BBCode [topic-xxx|Titre]
-    if let Some(caps) = RE_BBCODE_TITLE.captures(text) {
+    if let Some(caps) = RE_BBCODE_TITLE.captures(&decoded) {
         cleaned = caps[1].to_string();
     }
 
@@ -362,17 +393,16 @@ pub fn parse_topic_body(text: &str, exclude_topic_id: Option<&str>) -> Vec<VkNod
             }
 
             // Heuristic: if title contains "telecharger" or "download", use previous line
-            if title.to_lowercase().contains("telecharger")
-                || title.to_lowercase().contains("download")
+            if (title.to_lowercase().contains("telecharger")
+                || title.to_lowercase().contains("download"))
+                && i > 0
             {
-                if i > 0 {
-                    let prev_line = lines[i - 1].trim();
-                    if !prev_line.contains("vk.com")
-                        && !prev_line.contains("vk.ru")
-                        && prev_line.len() > 2
-                    {
-                        title = clean_title(prev_line);
-                    }
+                let prev_line = lines[i - 1].trim();
+                if !prev_line.contains("vk.com")
+                    && !prev_line.contains("vk.ru")
+                    && prev_line.len() > 2
+                {
+                    title = clean_title(prev_line);
                 }
             }
 
@@ -438,7 +468,7 @@ pub fn extract_documents(items: &[serde_json::Value]) -> Vec<VkNode> {
 
                     nodes.push(VkNode {
                         id: format!("doc_{}", doc_id),
-                        title: title.to_string(),
+                        title: decode_html_entities(title),
                         node_type: "file".to_string(),
                         url: Some(url.to_string()),
                         extension: ext,
@@ -463,7 +493,31 @@ pub fn extract_documents(items: &[serde_json::Value]) -> Vec<VkNode> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_topic_body;
+    use super::{decode_html_entities, extract_documents, parse_topic_body};
+
+    #[test]
+    fn decodes_html_entities_in_vk_text() {
+        assert_eq!(decode_html_entities("Alys &amp; Vicky"), "Alys & Vicky");
+        assert_eq!(decode_html_entities("&quot;Tintin&quot; T01"), "\"Tintin\" T01");
+        assert_eq!(decode_html_entities("L&#39;Arabe du futur"), "L'Arabe du futur");
+        assert_eq!(decode_html_entities("&#x41;&#X1F600;"), "A😀");
+        // One pass only, and unknown or invalid entities are left alone.
+        assert_eq!(decode_html_entities("a &amp;amp; b"), "a &amp; b");
+        assert_eq!(decode_html_entities("Tom & Jerry &unknown; &#0;"), "Tom & Jerry &unknown; &#0;");
+    }
+
+    #[test]
+    fn decodes_document_and_topic_titles() {
+        let items = vec![serde_json::json!({
+            "attachments": [{ "type": "doc", "doc": {
+                "id": 1, "owner_id": 2, "title": "Alys &amp; Vicky - T01.pdf", "url": "https://vk.com/doc2_1?hash=x"
+            }}]
+        })];
+        assert_eq!(extract_documents(&items)[0].title, "Alys & Vicky - T01.pdf");
+
+        let nodes = parse_topic_body("Tom &amp; Jerry\nhttps://vk.ru/topic-203785966_1", None);
+        assert_eq!(nodes[0].title, "Tom & Jerry");
+    }
 
     #[test]
     fn parses_vk_ru_topic_links_from_the_default_index() {

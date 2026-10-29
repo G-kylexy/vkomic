@@ -380,47 +380,29 @@ jobs:
         with:
           name: ${{ github.ref_name }}
           body: |
-            Vkomic 1.5 : la synchronisation VK est de retour.
+            Vkomic 1.5.1 : lecture case par case sur téléphone et téléchargements plus clairs.
 
-            Cette version remplace la 1.4.3, qui n'a jamais été publiée, et regroupe toutes les corrections depuis la 1.4.2.
+            Téléchargements (PC et Android)
+            - Quand VK ne fournit pas un fichier, Vkomic le dit au lieu de rester bloqué : « temporairement indisponible sur VK » (panne de son stockage, fréquente sur les anciens fichiers) ou « n'est plus disponible ou a été supprimé sur VK ». Les fichiers suivants de la file partent sans attendre.
+            - PC : la page d'erreur de VK n'est plus enregistrée à la place du fichier. Elle donnait un faux PDF marqué « Téléchargé ».
+            - Android : un téléchargement en échec ne reste plus bloqué à 0 % en occupant une place dans la file.
+            - Les titres s'affichent correctement : « Alys & Vicky » au lieu de « Alys &amp; Vicky ».
 
-            Connexion VK
-            - Connexion avec VK ID : dans Paramètres, cliquez sur « Continuer avec VK ID ». Plus besoin de créer une application VK ni de copier un jeton (#50).
-            - Synchronisation et téléchargements rétablis sur PC : VK a validé l'accès de Vkomic (#44, #49).
-            - Le voyant de connexion dit enfin la vérité : vert quand VK répond (vérifié au lancement), jaune quand vous êtes connecté mais pas encore vérifié, rouge avec la raison exacte quand une synchronisation échoue. La date de dernière synchronisation n'est plus effacée après un échec.
-            - Les erreurs VK s'affichent en clair (session expirée, trop de requêtes, compte bloqué, accès refusé par VK…) au lieu de « vérifiez votre jeton ».
-            - Le renouvellement de session ne tourne plus en boucle en cas d'échec : nouvel essai après 5 minutes.
+            Lecteur Android
+            - Nouveau mode case par case : chaque case s'affiche en plein écran, nette. Touchez les bords pour avancer, maintenez le doigt pour voir la page entière.
+            - Mode manga (droite à gauche) et barre pour aller directement à une page.
+            - Les albums s'ouvrent presque instantanément, même les gros : le fichier n'est plus recopié avant la lecture et les pages déjà vues ne sont plus recalculées.
+            - Le mode de lecture choisi est retenu et l'écran reste allumé pendant la lecture.
+            - Les barres du lecteur ne passent plus sous la barre d'état.
 
-            Synchronisation
-            - Synchronisation complète en quelques secondes : environ 4 s pour tout le catalogue, au lieu d'une trentaine. Vkomic ne demande plus à VK des informations inutiles qui faisaient rejouer les lectures groupées une par une.
-            - Un forum inaccessible ne ralentit plus les autres : seul celui-ci est relu, et il reste consultable à la demande.
+            Application Android
+            - Application plus légère : 29 Mo au lieu de 34 Mo.
+            - Navigation plus fluide dans les gros dossiers et pendant les téléchargements.
+            - Interface entièrement traduite en anglais et en russe.
 
-            Mises à jour
-            - La fenêtre de mise à jour n'apparaît plus qu'une fois par version, au lieu de revenir toutes les 30 minutes après « Plus tard ».
-            - Un badge « Mise à jour disponible » reste dans la barre latérale pour y revenir.
-            - Le bouton de la fenêtre indique clairement qu'il ouvre la page de téléchargement.
-
-            Téléchargements
-            - Reprise plus fiable des gros fichiers : deux essais en flux normal, puis reprise par morceaux de 32 Mo.
-            - Nouveau bouton pour repartir de zéro sur un téléchargement, en gardant une copie du fichier partiel.
-            - Les liens de téléchargement signés sont réutilisés ; VK n'est recontacté que s'ils ont expiré.
-            - Moins d'appels à VK pour rester dans les quotas.
-
-            Sécurité
-            - Les pièces jointes exécutables ou installables (.exe, .msi, .apk, .dmg, scripts…) sont refusées avant téléchargement.
-            - Téléchargements en HTTPS uniquement, noms de dossiers contrôlés, fichiers marqués comme venant d'Internet (Windows et macOS).
-            - Jetons VK rangés dans le Gestionnaire d'identifiants Windows ; fichier de réglages réservé à l'utilisateur sur macOS et Linux.
-            - Politique de sécurité du contenu activée et notes de mise à jour affichées en texte brut.
-            - Dépendances mises à jour, dont la bibliothèque TLS (rustls) et les certificats racines.
-
-            Linux
-            - AppImage : correction du plantage EGL_BAD_ALLOC sous Wayland / Mesa récent. Paquets .deb et .rpm disponibles en plus (#43).
-
-            Android
-            - Connexion avec VK ID et messages d'erreur VK compréhensibles.
-            - Synchronisation plus rapide, avec la même correction que sur PC.
-            - Les pièces jointes exécutables (.apk, .exe…) sont refusées.
-            - Si VK n'a pas encore validé l'application Android, Vkomic l'indique clairement au lieu d'échouer sans explication.
+            PC
+            - Textes de l'interface revus et traduction anglaise complétée.
+            - Messages de connexion VK plus clairs.
           files: final_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

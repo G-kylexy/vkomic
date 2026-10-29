@@ -1,5 +1,6 @@
 import React from "react";
 import { Download, X, Gift, ShieldCheck, Zap } from "lucide-react";
+import { useTranslation } from "../i18n";
 
 interface UpdateModalProps {
   version: string;
@@ -20,6 +21,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   onInstall,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const isReady = status === "ready";
   const isDownloading = status === "downloading";
   const percentValue =
@@ -36,9 +38,9 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   };
 
   const getButtonLabel = () => {
-    if (isReady) return "Redémarrer maintenant";
-    if (isDownloading) return "Téléchargement en cours...";
-    return "Télécharger la mise à jour";
+    if (isReady) return t.update.restartNow;
+    if (isDownloading) return t.update.downloadingButton;
+    return t.update.downloadUpdate;
   };
 
   return (
@@ -59,7 +61,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
             </div>
 
             <h2 className="text-lg font-bold text-white mb-1 leading-tight">
-              Mise à jour<br />disponible
+              {t.update.titleLine1}<br />{t.update.titleLine2}
             </h2>
 
             <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-semibold">
@@ -84,7 +86,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
           <div className="mb-4 flex items-center gap-2">
             <Gift size={16} className="text-purple-400" />
             <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wide">
-              Nouveautés
+              {t.update.whatsNew}
             </h3>
           </div>
 
@@ -93,7 +95,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
             {/* GitHub release notes are Markdown: render them as text, never as HTML,
                 since any script here would reach the Tauri commands. */}
             <p className="whitespace-pre-line break-words text-slate-400 text-sm leading-relaxed font-light">
-              {notes || "Améliorations de la stabilité et corrections de bugs."}
+              {notes || t.update.defaultNotes}
             </p>
           </div>
 
@@ -103,7 +105,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
             {isDownloading && (
               <div className="mb-4 animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex justify-between text-xs text-slate-400 mb-1.5 font-medium">
-                  <span>Téléchargement...</span>
+                  <span>{t.update.downloadingProgress}</span>
                   <span>{percentValue ?? 0}%</span>
                 </div>
                 <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -120,7 +122,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                 onClick={onClose}
                 className="px-4 py-2 rounded-lg text-sm text-slate-400 font-medium hover:text-white hover:bg-white/5 transition-colors"
               >
-                Plus tard
+                {t.common.later}
               </button>
               <button
                 onClick={handlePrimary}

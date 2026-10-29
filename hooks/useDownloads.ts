@@ -5,6 +5,7 @@ import { DEFAULT_DOWNLOAD_PATH, UI } from "../utils/constants";
 import { formatBytes, formatSpeed } from "../utils/formatters";
 import { idbDel, idbGet, idbGetByPrefix, idbSet, migrateLocalStorageJsonToIdb } from "../utils/storage";
 import { tauriFs, tauriEvents } from "../lib/tauri";
+import { getCurrentTranslations } from "../i18n";
 
 const getDownloadTarget = (download: DownloadItem, downloadPath: string) => {
     if (!downloadPath || downloadPath === DEFAULT_DOWNLOAD_PATH) return null;
@@ -103,7 +104,7 @@ export const useDownloads = (downloadPath: string) => {
         if (!downloadPath || downloadPath === DEFAULT_DOWNLOAD_PATH) {
             if (!missingDownloadPathAlertedRef.current) {
                 window.alert(
-                    "Aucun dossier de telechargement n'est configure. Choisissez un chemin dans Parametres avant de lancer un telechargement.",
+                    getCurrentTranslations().downloads.noFolderAlert,
                 );
                 missingDownloadPathAlertedRef.current = true;
             }
@@ -242,7 +243,7 @@ export const useDownloads = (downloadPath: string) => {
 
     useEffect(() => {
         const unlisten = tauriEvents.onDownloadResult((payload: any) => {
-            const { id, ok, status, path, size } = payload || {};
+            const { id, ok, status, path, size, reason } = payload || {};
             if (!id) return;
             const formattedSize = typeof size === "number" ? formatBytes(size) || undefined : undefined;
 
@@ -257,6 +258,8 @@ export const useDownloads = (downloadPath: string) => {
                     if (ok) return { ...next, status: "completed", speed: "0 MB/s" };
                     if (next.status === "paused" || next.status === "canceled") return next;
                     if (status === "aborted") return { ...next, status: "error", speed: "Interrompu" };
+                    if (reason === "vk_unavailable") return { ...next, status: "error", speed: "", errorReason: "vkUnavailable" };
+                    if (reason === "vk_deleted") return { ...next, status: "error", speed: "", errorReason: "vkDeleted" };
                     return { ...next, status: "error", speed: "Erreur" };
                 })
             );
@@ -339,7 +342,7 @@ export const useDownloads = (downloadPath: string) => {
         if (!download) return;
         setDownloads((prev) =>
             prev.map((d) =>
-                d.id === id ? { ...d, status: "pending", progress: 0, speed: "0 MB/s", createdAt: new Date().toISOString() } : d
+                d.id === id ? { ...d, status: "pending", progress: 0, speed: "0 MB/s", errorReason: undefined, createdAt: new Date().toISOString() } : d
             )
         );
     }, []);
@@ -355,7 +358,7 @@ export const useDownloads = (downloadPath: string) => {
                 setDownloads((prev) =>
                     prev.map((d) =>
                         d.id === id
-                            ? { ...d, status: "pending", progress: 0, speed: "0 MB/s", createdAt: new Date().toISOString() }
+                            ? { ...d, status: "pending", progress: 0, speed: "0 MB/s", errorReason: undefined, createdAt: new Date().toISOString() }
                             : d
                     )
                 );

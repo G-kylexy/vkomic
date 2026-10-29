@@ -33,8 +33,8 @@
 
         const hasResult = target.searchParams.has("code") || target.searchParams.has("error");
         if (!hasResult) {
-          document.querySelector("#title").textContent = "Réponse VK ID invalide";
-          document.querySelector("#message").textContent = "Relance la connexion depuis Vkomic.";
+          document.querySelector("#title").textContent = "Lien de connexion invalide";
+          document.querySelector("#message").textContent = "Relancez la connexion depuis Vkomic.";
           document.querySelector("#open").hidden = true;
           return;
         }

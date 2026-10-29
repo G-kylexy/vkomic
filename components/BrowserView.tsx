@@ -139,7 +139,7 @@ const BrowserFolderItem = React.memo(({ node, language, t, navigateTo, openLink 
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
               <span className="text-xs text-slate-400 font-medium capitalize truncate">
-                {node.type || "Category"}
+                {(node.type && node.type !== "file" ? t.library.nodeTypes[node.type] : undefined) || t.library.nodeTypes.category}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -148,7 +148,7 @@ const BrowserFolderItem = React.memo(({ node, language, t, navigateTo, openLink 
                 className="text-slate-500 flex-shrink-0"
               />
               <span className="text-xs text-slate-500 font-medium">
-                Folder
+                {t.library.folderLabel}
               </span>
             </div>
           </div>
@@ -203,7 +203,7 @@ const BrowserFileItem = React.memo(({
   const progress = activeDownload?.progress || 0;
   const statusText =
     activeDownload?.status === "paused"
-      ? "Pause"
+      ? t.downloads.statusPaused
       : activeDownload?.speed || "0 MB/s";
 
   return (
@@ -777,7 +777,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
                         ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40"
                         : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
                         }`}
-                      title="Accueil"
+                      title={t.tooltips.home}
                     >
                       <Home size={16} />
                     </button>
@@ -864,7 +864,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
                     onClick={handleFullSync}
                     className="flex items-center justify-center rounded-lg transition-all bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 w-9 h-9"
                     disabled={isLoading}
-                    title="Synchroniser"
+                    title={t.tooltips.sync}
                   >
                     <RefreshCw
                       size={18}
@@ -907,11 +907,11 @@ const BrowserView: React.FC<BrowserViewProps> = ({
               <div className="bg-[#0f1523] border border-slate-800/60 rounded-xl shadow-sm overflow-hidden flex flex-col">
                 <div className="px-4 py-3 border-b border-slate-800/60 flex items-center justify-between text-xs text-slate-400 bg-[#0f1523] sticky top-0 z-10">
                   <span className="font-semibold text-slate-200">
-                    {t.library.fileLabel} · {fileNodes.length}
+                    {fileNodes.length > 1 ? t.library.filesLabel : t.library.fileLabel} · {fileNodes.length}
                   </span>
                   {activeDownloadsInView.length > 0 && (
                     <span className="hidden sm:inline-block">
-                      {activeDownloadsInView.length} en cours / en file d'attente
+                      {activeDownloadsInView.length} {t.library.activeInQueue}
                     </span>
                   )}
                 </div>
@@ -943,13 +943,13 @@ const BrowserView: React.FC<BrowserViewProps> = ({
                     </div>
 
                     <h3 className="text-white text-lg font-bold mb-2">
-                      {t.library.noResults}
+                      {t.library.noSearchResults}
                     </h3>
 
                     <p className="text-slate-400 text-sm mb-8 leading-relaxed">
-                      Vous n'avez probablement pas encore synchronisé ce dossier.
-                      <br />
-                      Voulez-vous continuer votre recherche directement sur VK ?
+                      {t.library.noSearchResultsDescription}
+
+
                     </p>
 
                     <button
@@ -957,7 +957,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
                       className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 group"
                     >
                       <span className="uppercase text-xs tracking-wider">
-                        Rechercher sur VK
+                        {t.library.searchOnVk}
                       </span>
                       <ChevronRight
                         size={14}
@@ -967,7 +967,7 @@ const BrowserView: React.FC<BrowserViewProps> = ({
                   </div>
                 ) : (
                   <div className="text-slate-500 italic">
-                    {t.library.noResults}
+                    {t.library.emptyFolder}
                   </div>
                 )}
               </div>
