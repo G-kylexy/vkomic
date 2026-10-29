@@ -7,6 +7,7 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import android.util.Log
 import android.view.WindowManager
 import com.facebook.react.bridge.*
@@ -140,6 +141,23 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
         return Pair(pfd, openRendererFor(pfd))
     }
 
+    /**
+     * The document's size. Descriptors from the storage access framework report
+     * -1, so the provider is asked instead.
+     */
+    private fun documentSize(uri: String, pfd: ParcelFileDescriptor): Long {
+        if (pfd.statSize >= 0 || !uri.startsWith("content://")) return pfd.statSize
+        return try {
+            reactContext.contentResolver
+                .query(Uri.parse(uri), arrayOf(OpenableColumns.SIZE), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null }
+                ?: -1L
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot read the size of $uri", e)
+            -1L
+        }
+    }
+
     @ReactMethod
     fun openDocument(uri: String, promise: Promise) {
         scope.launch {
@@ -150,7 +168,7 @@ class PdfPageExtractorModule(private val reactContext: ReactApplicationContext) 
                 val (pfd, renderer) = openPdf(uri)
                 // Rendered pages are cached per document. The size keeps a file
                 // downloaded again under the same URI from reusing stale pages.
-                val docId = "${uri.hashCode()}_${pfd.statSize}"
+                val docId = "${uri.hashCode()}_${documentSize(uri, pfd)}"
 
                 currentDocId = docId
                 currentPfd = pfd

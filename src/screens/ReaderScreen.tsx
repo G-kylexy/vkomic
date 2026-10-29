@@ -4,6 +4,7 @@ import { FlashList, FlashListRef } from "@shopify/flash-list";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useVk } from "../context/VkContext";
 import { spacing, radius } from "../theme";
@@ -94,6 +95,9 @@ const PageScrubber: React.FC<{
 export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose }) => {
     const { activePalette: p, language } = useVk();
     const { width, height } = useWindowDimensions();
+    // The reader is laid over the app's safe area, so its bars keep clear of the
+    // status bar and the gesture bar themselves.
+    const insets = useSafeAreaInsets();
     const t = getT(language);
 
     const [viewMode, setViewMode] = useState<ViewMode>("horizontal");
@@ -387,7 +391,7 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
     return (
         <View style={[styles.container, { backgroundColor: "#000" }]}>
             {showControls && (
-                <View style={[styles.header, { backgroundColor: `${p.background}F0` }]}>
+                <View style={[styles.header, { backgroundColor: `${p.background}F0`, paddingTop: insets.top, height: 60 + insets.top }]}>
                     <Pressable onPress={onClose} style={styles.backBtn} accessibilityLabel={t.reader.back}>
                         <Ionicons name="close" size={24} color={p.text} />
                     </Pressable>
@@ -427,7 +431,7 @@ export const ReaderScreen: React.FC<ReaderScreenProps> = ({ uri, title, onClose 
 
             {showControls && totalPages > 1 && (
                 <View
-                    style={[styles.footer, { backgroundColor: `${p.background}F0` }]}
+                    style={[styles.footer, { backgroundColor: `${p.background}F0`, paddingBottom: spacing.sm + insets.bottom }]}
                     accessibilityLabel={t.reader.pageOf
                         .replace("{page}", String(currentPage + 1))
                         .replace("{total}", String(totalPages))}
