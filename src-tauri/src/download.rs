@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures_util::StreamExt;
-use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, RANGE};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, CONTENT_TYPE, RANGE};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -18,6 +18,39 @@ const VKOMIC_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_VERSION"),
     " (+https://github.com/G-kylexy/vkomic)"
 );
+
+/// VK refused the file in a way that retrying straight away cannot fix, so the
+/// download stops and the UI says why.
+#[derive(Debug)]
+enum VkRefusal {
+    /// The file storage answered with a server error. For some files it returns
+    /// an instant 504 "temporarily unavailable" page for days at a time.
+    StorageUnavailable(StatusCode),
+    /// VK answered with its "file unavailable or deleted" page (HTTP 200).
+    FileDeleted,
+}
+
+impl VkRefusal {
+    fn reason(&self) -> &'static str {
+        match self {
+            Self::StorageUnavailable(_) => "vk_unavailable",
+            Self::FileDeleted => "vk_deleted",
+        }
+    }
+}
+
+impl std::fmt::Display for VkRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StorageUnavailable(status) => {
+                write!(f, "VK storage returned HTTP {status} for this file")
+            }
+            Self::FileDeleted => write!(f, "VK returned a web page instead of the file"),
+        }
+    }
+}
+
+impl std::error::Error for VkRefusal {}
 
 // Anyone can post on the VK board: refuse types that run when opened, so an
 // attachment like "Tome 5.pdf" with ext "exe" cannot land in the library.
@@ -44,7 +77,7 @@ fn sanitize_file_name(file_name: &str) -> Result<String> {
     // Windows drops trailing dots and spaces, which would turn "x.pdf.exe." into
     // an executable; this also reduces "." and ".." to an empty name.
     let cleaned = cleaned
-        .trim_end_matches(|c: char| c == '.' || c == ' ')
+        .trim_end_matches(['.', ' '])
         .trim_start();
     if cleaned.is_empty() {
         return Err(anyhow::anyhow!("Invalid file name"));
@@ -294,7 +327,8 @@ impl DownloadManager {
                         serde_json::json!({
                             "id": id_for_closure,
                             "ok": false,
-                            "error": e.to_string()
+                            "error": e.to_string(),
+                            "reason": e.downcast_ref::<VkRefusal>().map(VkRefusal::reason)
                         }),
                     );
                 } else {
@@ -362,6 +396,7 @@ async fn download_file_worker(
             }
             Ok(DownloadAttemptOutcome::MoreData) => continue,
             Err(error) if *cancel_rx.borrow() => return Err(error),
+            Err(error) if error.is::<VkRefusal>() => return Err(error),
             Err(error) => {
                 failed_attempts += 1;
                 if failed_attempts == MAX_DOWNLOAD_ATTEMPTS {
@@ -472,11 +507,26 @@ async fn download_file_attempt(
         return Ok(DownloadAttemptOutcome::Complete);
     }
 
+    if response.status().is_server_error() {
+        return Err(VkRefusal::StorageUnavailable(response.status()).into());
+    }
+
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(
             "VK returned HTTP {} for the requested byte range",
             response.status()
         ));
+    }
+
+    // Checked before opening the file: writing VK's error page would leave an
+    // HTML page named like the document, or truncate a partial download.
+    let is_html = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.trim_start().to_ascii_lowercase().starts_with("text/html"));
+    if is_html {
+        return Err(VkRefusal::FileDeleted.into());
     }
 
     let response_content_length = response.content_length();
