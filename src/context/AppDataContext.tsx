@@ -291,7 +291,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   // Batched progress updates to avoid race conditions with multiple concurrent downloads
   const pendingProgressRef = useRef(new Map<string, Partial<DownloadItem>>());
   const retryCountRef = useRef(new Map<string, number>());
-  const downloadUrlRefreshNeededRef = useRef(new Set<string>());
   const lastSavedSyncedDataRef = useRef<VkNode[] | null>(null);
   const lastNotifRef = useRef(new Map<string, number>()); // Throttle notifications to 1s
   const MAX_AUTO_RETRIES = 3;
@@ -473,29 +472,24 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       /^https?:\/\/(?:[a-z0-9-]+\.)?vk\.(?:com|ru)\/doc(-?\d+)_(\d+)(?:[/?#].*)?$/i
     );
     const hasSignedParameters = /[?&](?:hash|dl)=[^&#]+/i.test(item.url);
-    const ownerId = item.vkOwnerId || vkDocumentMatch?.[1];
-    const docId = item.vkDocId || vkDocumentMatch?.[2];
-    const needsRefresh = downloadUrlRefreshNeededRef.current.has(item.id);
 
-    // Les URLs des pièces jointes VK sont déjà signées. Ne demander une URL
-    // fraîche qu'après un échec, ou immédiatement pour un lien vk.com/doc nu.
-    if (!needsRefresh && (!vkDocumentMatch || hasSignedParameters)) {
+    // Les URLs des pièces jointes VK sont déjà signées : on les utilise telles
+    // quelles, même après un échec. Redemander une URL à docs.getById coûtait
+    // une requête pour rien : le jeton VK ID n'a pas le droit "docs" (erreur 15).
+    if (!vkDocumentMatch || hasSignedParameters) {
       return item.url;
     }
 
+    const ownerId = item.vkOwnerId || vkDocumentMatch[1];
+    const docId = item.vkDocId || vkDocumentMatch[2];
     if (ownerId && docId && token) {
       const resolved = await getDocumentDownloadUrl(token, ownerId, docId, item.vkAccessKey);
       if (resolved) {
-        downloadUrlRefreshNeededRef.current.delete(item.id);
-        console.log(`[Download] Refreshed document URL for ${item.title}`);
+        console.log(`[Download] Resolved document URL for ${item.title}`);
         return resolved;
       }
     }
-
-    if (vkDocumentMatch && !hasSignedParameters) {
-      throw new Error("Impossible d'obtenir une URL de téléchargement directe depuis VK");
-    }
-    return item.url;
+    throw new Error("Impossible d'obtenir une URL de téléchargement directe depuis VK");
   };
 
   const completeIosDownload = async (item: DownloadItem, result: any) => {
@@ -511,7 +505,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     saveDownloadsToStorage(updated);
     resumablesRef.current.delete(item.id);
     startingRef.current.delete(item.id);
-    downloadUrlRefreshNeededRef.current.delete(item.id);
     clearRetryCount(item.id);
     clearSpeed(speedRef, item.id);
     NativeNotification.cancelNotification(item.id);
@@ -592,7 +585,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
           saveDownloadsToStorage(updated);
 
           startingRef.current.delete(item.id);
-          downloadUrlRefreshNeededRef.current.delete(item.id);
           clearRetryCount(item.id);
           clearSpeed(speedRef, item.id);
 
@@ -644,7 +636,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
               saveDownloadsToStorage(updated);
 
               startingRef.current.delete(item.id);
-              downloadUrlRefreshNeededRef.current.delete(item.id);
               clearRetryCount(item.id);
               clearSpeed(speedRef, item.id);
               NativeNotification.cancelNotification(item.id);
@@ -724,7 +715,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
             speed: "",
             ...(vkUnavailable ? { errorReason: "vkUnavailable" as const } : {}),
           });
-          if (!vkUnavailable) downloadUrlRefreshNeededRef.current.add(item.id);
           if (vkUnavailable || !scheduleAutoRetry(item.id, item.title)) {
             NativeNotification.cancelNotification(item.id);
             NativeNotification.showErrorNotification(item.id, item.title);
@@ -798,7 +788,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const isManualPause = item.status === 'paused';
       if (!isManualPause && !vkUnavailable) {
-        downloadUrlRefreshNeededRef.current.add(item.id);
         scheduleAutoRetry(item.id, item.title);
       }
     }
@@ -1235,7 +1224,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         console.warn("Resume failed, will restart:", e);
         resumablesRef.current.delete(id);
         startingRef.current.delete(id);
-        downloadUrlRefreshNeededRef.current.add(id);
       }
     }
 
@@ -1247,7 +1235,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       await FileSystem.deleteAsync(current.path, { idempotent: true }).catch(() => undefined);
       resumablesRef.current.delete(id);
       startingRef.current.delete(id);
-      downloadUrlRefreshNeededRef.current.add(id);
       clearSpeed(speedRef, id);
       setDownloads(prev => prev.map(d => d.id === id ? {
         ...d,
@@ -1279,7 +1266,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
         startingRef.current.delete(id); // Clean up on failure
         const isCanceled = e?.message?.includes('canceled') || e?.message?.includes('Canceled');
         if (!isCanceled) {
-          downloadUrlRefreshNeededRef.current.add(id);
           upsertDownload(id, { status: "error", speed: "" });
         }
       }
@@ -1308,7 +1294,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     startingRef.current.delete(id);
-    downloadUrlRefreshNeededRef.current.delete(id);
     clearSpeed(speedRef, id);
 
     // Cancel notification
