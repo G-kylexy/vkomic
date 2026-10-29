@@ -46,7 +46,7 @@ const DownloadCard = React.memo<DownloadCardProps>(({
       case "downloading":
         return { text: t.downloads.statusDownloading, color: a.accentBright, icon: "cloud-download" };
       case "pending":
-        return { text: "En attente", color: a.accent, icon: "time-outline" };
+        return { text: t.downloads.statusPending, color: a.accent, icon: "time-outline" };
       case "canceled":
         return { text: t.downloads.statusCanceled, color: p.subtle, icon: "close-circle" };
       case "error":
@@ -87,7 +87,7 @@ const DownloadCard = React.memo<DownloadCardProps>(({
               <View style={styles.metaRow}>
                 <Text style={styles.metaText}>{(item.extension || "FILE").toUpperCase()}</Text>
                 <Text style={styles.metaDivider}>•</Text>
-                <Text style={styles.metaText}>{item.size || "Size unknown"}</Text>
+                <Text style={styles.metaText}>{item.size || t.downloads.sizeUnknown}</Text>
                 {!styles.cardContainer.width && item.speed && (
                   <>
                     <Text style={styles.metaDivider}>•</Text>
@@ -172,7 +172,7 @@ const DownloadCard = React.memo<DownloadCardProps>(({
                   onPress={() => onLire(item)}
                 >
                   <Ionicons name="book-outline" size={16} color={p.primaryBright} />
-                  <Text style={[styles.openFileText, { color: p.primaryBright }]}>Lire</Text>
+                  <Text style={[styles.openFileText, { color: p.primaryBright }]}>{t.common.read}</Text>
                 </Pressable>
               ) : null}
               <Pressable
@@ -180,7 +180,7 @@ const DownloadCard = React.memo<DownloadCardProps>(({
                 onPress={() => onDossier()}
               >
                 <Ionicons name="folder-open-outline" size={16} color={a.accentBright} />
-                <Text style={[styles.openFileText, { color: a.accentBright }]}>Dossier</Text>
+                <Text style={[styles.openFileText, { color: a.accentBright }]}>{t.common.folder}</Text>
               </Pressable>
             </View>
           ) : (item.status === "error" || item.status === "canceled") ? (
@@ -248,7 +248,7 @@ export const DownloadsScreen: React.FC = () => {
   // Memoize handlers to prevent checking unnecessary re-renders
   const handleLire = React.useCallback(async (item: DownloadItem) => {
     if (!item.path) {
-      Alert.alert("Erreur", "Fichier introuvable");
+      Alert.alert(t.common.error, t.common.fileNotFound);
       return;
     }
 
@@ -256,13 +256,13 @@ export const DownloadsScreen: React.FC = () => {
       setReadingFile({ uri: item.path, title: item.title });
     } catch (error: any) {
       console.error("DownloadsScreen: Error opening file:", error);
-      Alert.alert("Erreur", "Impossible d'ouvrir le lecteur interne.");
+      Alert.alert(t.common.error, t.downloads.readerOpenError);
     }
-  }, [setReadingFile]);
+  }, [setReadingFile, t]);
 
   const handleDossier = React.useCallback(async (item: DownloadItem) => {
     if (!item.path) {
-      Alert.alert("Erreur", "Fichier introuvable");
+      Alert.alert(t.common.error, t.common.fileNotFound);
       return;
     }
 
@@ -271,21 +271,21 @@ export const DownloadsScreen: React.FC = () => {
         const folderUri = FolderService.getParentFolderUri(item.path);
         const opened = await FolderService.openFileLocation(folderUri);
         if (!opened) {
-          Alert.alert("Erreur", "Impossible d'ouvrir le dossier.");
+          Alert.alert(t.common.error, t.downloads.folderOpenError);
         }
       } catch (e) {
-        Alert.alert("Erreur", "Impossible d'ouvrir le dossier.");
+        Alert.alert(t.common.error, t.downloads.folderOpenError);
       }
     } else {
       Alert.alert("Info", "Les fichiers sont stockés dans le dossier Documents de l'application.");
     }
-  }, []);
+  }, [t]);
 
   const renderItem = useCallback(({ item }: { item: DownloadItem }) => {
     if (pendingDeletions[item.id]) {
       return (
         <View style={styles.undoContainer}>
-          <Text style={styles.undoText}>Téléchargement retiré de la liste</Text>
+          <Text style={styles.undoText}>{t.downloads.removedFromList}</Text>
           <Pressable
             style={({ pressed }: any) => [styles.undoBtn, pressed && { opacity: 0.7 }]}
             onPress={() => undoDelete(item.id)}
@@ -306,7 +306,7 @@ export const DownloadsScreen: React.FC = () => {
         <View style={[styles.deleteActionContainer, { backgroundColor: p.danger, width: 80, alignItems: 'center', justifyContent: 'center' }]}>
           <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
             <Ionicons name="trash-outline" size={24} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold', marginTop: 4 }}>Libérer</Text>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold', marginTop: 4 }}>{t.downloads.swipeRemove}</Text>
           </Animated.View>
         </View>
       );
@@ -491,7 +491,7 @@ export const DownloadsScreen: React.FC = () => {
         title="Effacer l'historique"
         message="Voulez-vous supprimer tous les téléchargements de la liste ?"
         confirmText="Effacer"
-        cancelText="Annuler"
+        cancelText={t.common.cancel}
         icon="trash"
         palette={p}
         accent={accent.accent}

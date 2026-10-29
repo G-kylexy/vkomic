@@ -7,6 +7,19 @@ export type Translations = {
     downloads: string;
     settings: string;
   };
+  common: {
+    error: string;
+    info: string;
+    cancel: string;
+    delete: string;
+    folder: string;
+    read: string;
+    offline: string;
+    fileNotFound: string;
+    noPdfApp: string;
+    shareTitle: string;
+    shareUnavailable: string;
+  };
   home: {
     tagline: string;
     connected: string;
@@ -34,6 +47,12 @@ export type Translations = {
     errorNoStorage: string;
     errorRead: string;
     errorPermission: string;
+    folderNotFound: string;
+    pdfOpenError: string;
+    deleteError: string;
+    sharePrepareError: string;
+    shareError: string;
+    folderOpenHint: string;
     note: string;
     deleteConfirmTitle: string;
     deleteConfirmMsg: string;
@@ -51,6 +70,7 @@ export type Translations = {
     signInFailed: string;
     signInIncomplete: string;
     signInUnknownError: string;
+    folderPickError: string;
     groupLabel: string;
     topicLabel: string;
     prefsTitle: string;
@@ -113,6 +133,17 @@ export type Translations = {
     clearList: string;
     errorNoFolder: string;
     errorBlockedType: string;
+    statusPending: string;
+    sizeUnknown: string;
+    readerOpenError: string;
+    folderOpenError: string;
+    removedFromList: string;
+    swipeRemove: string;
+    downloadAll: string;
+    cancelAll: string;
+    a11yPause: string;
+    a11yResume: string;
+    a11yCancel: string;
   };
 
   browser: {
@@ -153,6 +184,19 @@ const translations: Record<Language, Translations> = {
       downloads: "Téléchargements",
       settings: "Paramètres",
     },
+    common: {
+      error: "Erreur",
+      info: "Information",
+      cancel: "Annuler",
+      delete: "Supprimer",
+      folder: "Dossier",
+      read: "Lire",
+      offline: "Mode hors-ligne",
+      fileNotFound: "Fichier introuvable",
+      noPdfApp: "Aucune application PDF n'est installée.",
+      shareTitle: "Partage",
+      shareUnavailable: "Le partage n'est pas disponible sur cet appareil.",
+    },
     home: {
       tagline: "Retrouve ta bibliothèque VK dans un format optimisé mobile.",
       connected: "Connecté",
@@ -180,6 +224,12 @@ const translations: Record<Language, Translations> = {
       errorNoStorage: "Stockage local non disponible (documentDirectory).",
       errorRead: "Impossible de lire la bibliothèque locale.",
       errorPermission: "Permission perdue. Veuillez reconfigurer le dossier dans les paramètres.",
+      folderNotFound: "Dossier introuvable (clé USB débranchée ?)",
+      pdfOpenError: "Impossible d'ouvrir le fichier PDF.",
+      deleteError: "Impossible de supprimer le fichier.",
+      sharePrepareError: "Impossible de préparer le fichier pour le partage.",
+      shareError: "Impossible de partager le fichier.",
+      folderOpenHint: "Impossible d'ouvrir le dossier directement. Utilise ton gestionnaire de fichiers.",
       note: "Récupération des fichiers locaux…",
       deleteConfirmTitle: "Supprimer le fichier ?",
       deleteConfirmMsg: "Voulez-vous vraiment supprimer {name} ? Cette action est irréversible.",
@@ -227,6 +277,17 @@ const translations: Record<Language, Translations> = {
       clearList: "Vider la liste",
       errorNoFolder: "Configurez un dossier de téléchargement dans les paramètres",
       errorBlockedType: "Type de fichier bloqué : il pourrait installer ou lancer un programme.",
+      statusPending: "En attente",
+      sizeUnknown: "Taille inconnue",
+      readerOpenError: "Impossible d'ouvrir le lecteur interne.",
+      folderOpenError: "Impossible d'ouvrir le dossier.",
+      removedFromList: "Téléchargement retiré de la liste",
+      swipeRemove: "Libérer",
+      downloadAll: "Tout télécharger",
+      cancelAll: "Tout annuler",
+      a11yPause: "Mettre en pause",
+      a11yResume: "Reprendre le téléchargement",
+      a11yCancel: "Annuler le téléchargement",
     },
     settings: {
       connectionTitle: "Connexion VK",
@@ -238,6 +299,7 @@ const translations: Record<Language, Translations> = {
       signInFailed: "Connexion VK impossible",
       signInIncomplete: "La réponse de VK ID est incomplète ou ne correspond pas à la demande.",
       signInUnknownError: "Une erreur inconnue est survenue.",
+      folderPickError: "Impossible de sélectionner le dossier",
       groupLabel: "Group ID",
       topicLabel: "Topic ID",
       prefsTitle: "Préférences",
@@ -296,6 +358,19 @@ const translations: Record<Language, Translations> = {
       downloads: "Downloads",
       settings: "Settings",
     },
+    common: {
+      error: "Error",
+      info: "Information",
+      cancel: "Cancel",
+      delete: "Delete",
+      folder: "Folder",
+      read: "Read",
+      offline: "Offline mode",
+      fileNotFound: "File not found",
+      noPdfApp: "No PDF app is installed.",
+      shareTitle: "Share",
+      shareUnavailable: "Sharing is not available on this device.",
+    },
     home: {
       tagline: "Browse your VK library with a mobile-first UI.",
       connected: "Connected",
@@ -323,6 +398,12 @@ const translations: Record<Language, Translations> = {
       errorNoStorage: "Local storage unavailable.",
       errorRead: "Unable to read local library.",
       errorPermission: "Permission lost. Please reconfigure the folder in settings.",
+      folderNotFound: "Folder not found (USB drive unplugged?)",
+      pdfOpenError: "Could not open the PDF file.",
+      deleteError: "Could not delete the file.",
+      sharePrepareError: "Could not prepare the file for sharing.",
+      shareError: "Could not share the file.",
+      folderOpenHint: "Could not open the folder directly. Use your file manager.",
       note: "Fetching local files…",
       deleteConfirmTitle: "Delete file?",
       deleteConfirmMsg: "Are you sure you want to delete {name}? This action cannot be undone.",
@@ -370,6 +451,17 @@ const translations: Record<Language, Translations> = {
       clearList: "Clear list",
       errorNoFolder: "Configure a download folder in settings",
       errorBlockedType: "Blocked file type: it could install or run a program.",
+      statusPending: "Pending",
+      sizeUnknown: "Size unknown",
+      readerOpenError: "Could not open the built-in reader.",
+      folderOpenError: "Could not open the folder.",
+      removedFromList: "Download removed from the list",
+      swipeRemove: "Remove",
+      downloadAll: "Download all",
+      cancelAll: "Cancel all",
+      a11yPause: "Pause",
+      a11yResume: "Resume download",
+      a11yCancel: "Cancel download",
     },
     settings: {
       connectionTitle: "VK connection",
@@ -381,6 +473,7 @@ const translations: Record<Language, Translations> = {
       signInFailed: "VK sign-in failed",
       signInIncomplete: "VK ID returned an incomplete or mismatched response.",
       signInUnknownError: "An unknown error occurred.",
+      folderPickError: "Could not select the folder",
       groupLabel: "Group ID",
       topicLabel: "Topic ID",
       prefsTitle: "Preferences",
@@ -439,6 +532,19 @@ const translations: Record<Language, Translations> = {
       downloads: "Загрузки",
       settings: "Настройки",
     },
+    common: {
+      error: "Ошибка",
+      info: "Информация",
+      cancel: "Отмена",
+      delete: "Удалить",
+      folder: "Папка",
+      read: "Читать",
+      offline: "Офлайн-режим",
+      fileNotFound: "Файл не найден",
+      noPdfApp: "Не установлено приложение для PDF.",
+      shareTitle: "Поделиться",
+      shareUnavailable: "На этом устройстве нельзя поделиться файлом.",
+    },
     home: {
       tagline: "VK библиотека в удобном мобильном интерфейсе.",
       connected: "Подключено",
@@ -466,6 +572,12 @@ const translations: Record<Language, Translations> = {
       errorNoStorage: "Локальное хранилище недоступно.",
       errorRead: "Не удалось прочитать локальную библиотеку.",
       errorPermission: "Разрешение утрачено. Пожалуйста, перенастройте папку в настройках.",
+      folderNotFound: "Папка не найдена (флешка отключена?)",
+      pdfOpenError: "Не удалось открыть PDF.",
+      deleteError: "Не удалось удалить файл.",
+      sharePrepareError: "Не удалось подготовить файл для отправки.",
+      shareError: "Не удалось поделиться файлом.",
+      folderOpenHint: "Не удалось открыть папку напрямую. Воспользуйся файловым менеджером.",
       note: "Получение локальных файлов…",
       deleteConfirmTitle: "Удалить файл?",
       deleteConfirmMsg: "Вы уверены, что хотите удалить {name}? Это действие необратимо.",
@@ -513,6 +625,17 @@ const translations: Record<Language, Translations> = {
       clearList: "Очистить список",
       errorNoFolder: "Настройте папку загрузок в настройках",
       errorBlockedType: "Этот тип файла заблокирован: он может установить или запустить программу.",
+      statusPending: "В очереди",
+      sizeUnknown: "Размер неизвестен",
+      readerOpenError: "Не удалось открыть встроенную читалку.",
+      folderOpenError: "Не удалось открыть папку.",
+      removedFromList: "Загрузка убрана из списка",
+      swipeRemove: "Убрать",
+      downloadAll: "Скачать всё",
+      cancelAll: "Отменить всё",
+      a11yPause: "Пауза",
+      a11yResume: "Продолжить загрузку",
+      a11yCancel: "Отменить загрузку",
     },
     settings: {
       connectionTitle: "Подключение VK",
@@ -524,6 +647,7 @@ const translations: Record<Language, Translations> = {
       signInFailed: "Не удалось войти через VK",
       signInIncomplete: "Ответ VK ID неполный или не соответствует запросу.",
       signInUnknownError: "Произошла неизвестная ошибка.",
+      folderPickError: "Не удалось выбрать папку",
       groupLabel: "Group ID",
       topicLabel: "Topic ID",
       prefsTitle: "Настройки",

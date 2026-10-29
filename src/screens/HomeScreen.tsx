@@ -266,7 +266,7 @@ const FileRow = memo<FileRowProps>(({
                 style={({ pressed }) => [styles.splitBtn, styles.splitBtnPrimary, pressed && { opacity: 0.7 }]}
                 onPress={() => d.status === "paused" ? onResume(d.id) : onPause(d.id)}
                 accessibilityRole="button"
-                accessibilityLabel={d.status === "paused" ? "Reprendre le téléchargement" : "Mettre en pause"}
+                accessibilityLabel={d.status === "paused" ? t.downloads.a11yResume : t.downloads.a11yPause}
               >
                 <Ionicons
                   name={d.status === "paused" ? "play" : "pause"}
@@ -282,7 +282,7 @@ const FileRow = memo<FileRowProps>(({
                 style={({ pressed }) => [styles.splitBtn, styles.splitBtnDanger, pressed && { opacity: 0.7 }]}
                 onPress={() => onCancel(d.id)}
                 accessibilityRole="button"
-                accessibilityLabel="Annuler le téléchargement"
+                accessibilityLabel={t.downloads.a11yCancel}
               >
                 <Ionicons name="stop" size={14} color={p.danger} />
               </Pressable>
@@ -522,7 +522,7 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
                 color={isAnyFileActive ? p.danger : p.primaryBright}
               />
               <Text style={[styles.bulkBtnText, isAnyFileActive && { color: p.danger }]}>
-                {isAnyFileActive ? "Tout annuler" : "Tout télécharger"}
+                {isAnyFileActive ? t.downloads.cancelAll : t.downloads.downloadAll}
               </Text>
             </Pressable>
           </View>

@@ -42,6 +42,7 @@ type LibraryFileRowProps = {
   palette: typeof defaultPalette;
   styles: any;
   accentColor: string;
+  folderLabel: string;
   onPress: (file: LocalFile) => void;
   onDelete: (file: LocalFile) => void;
   onShare: (file: LocalFile) => void;
@@ -84,7 +85,7 @@ const SkeletonRow = React.memo<{ styles: any, palette: typeof defaultPalette }>(
   );
 });
 
-const LibraryFileRow = React.memo<LibraryFileRowProps>(({ file: f, palette: p, styles, accentColor, onPress, onDelete, onShare }) => {
+const LibraryFileRow = React.memo<LibraryFileRowProps>(({ file: f, palette: p, styles, accentColor, folderLabel, onPress, onDelete, onShare }) => {
   const isGrid = styles.fileContainer.width !== undefined;
 
   return (
@@ -109,7 +110,7 @@ const LibraryFileRow = React.memo<LibraryFileRowProps>(({ file: f, palette: p, s
               {f.name}
             </Text>
             <Text style={styles.fileMeta} numberOfLines={1}>
-              {f.isDirectory ? "Dossier" : formatBytes(f.size)}
+              {f.isDirectory ? folderLabel : formatBytes(f.size)}
             </Text>
           </View>
         </Pressable>
@@ -417,7 +418,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
             setError(t.library.errorPermission);
             break;
           case SafErrorType.FOLDER_NOT_FOUND:
-            setError("Dossier introuvable (clé USB débranchée ?)");
+            setError(t.library.folderNotFound);
             break;
           default:
             setError(t.library.errorRead);
@@ -428,7 +429,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
     } finally {
       setIsLoading(false);
     }
-  }, [dirUri, isSafUri, t.library.errorNoStorage, t.library.errorRead, t.library.errorPermission]);
+  }, [dirUri, isSafUri, t.library.errorNoStorage, t.library.errorRead, t.library.errorPermission, t.library.folderNotFound]);
 
   const onFilePress = useCallback(async (file: LocalFile) => {
     if (file.isDirectory) {
@@ -452,7 +453,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
           // SAF URIs: use system PDF viewer directly (no cache copy needed)
           const opened = await FolderService.openFile(file.uri);
           if (!opened) {
-            Alert.alert("Erreur", "Aucune application PDF n'est installée.");
+            Alert.alert(t.common.error, t.common.noPdfApp);
           }
         } else {
           // Local files: use internal reader
@@ -460,11 +461,11 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
         }
       } catch (error) {
         if (error instanceof SafError && error.type === SafErrorType.NO_APP_AVAILABLE) {
-          Alert.alert("Erreur", "Aucune application PDF n'est installée sur cet appareil.");
+          Alert.alert(t.common.error, t.common.noPdfApp);
         } else if (error instanceof SafError) {
-          Alert.alert("Erreur", error.message);
+          Alert.alert(t.common.error, error.message);
         } else {
-          Alert.alert("Erreur", "Impossible d'ouvrir le fichier PDF.");
+          Alert.alert(t.common.error, t.library.pdfOpenError);
         }
       }
       return;
@@ -490,7 +491,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert("Partage", "Le partage n'est pas disponible sur cet appareil.");
+        Alert.alert(t.common.shareTitle, t.common.shareUnavailable);
         return;
       }
       await Sharing.shareAsync(fileUri, {
@@ -501,7 +502,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
     } catch (e) {
       console.error("Failed to share file", e);
     }
-  }, [setReadingFile]);
+  }, [setReadingFile, t]);
 
   const onDeletePress = useCallback((file: LocalFile) => {
     setDeleteDialog({ visible: true, file });
@@ -529,15 +530,15 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
         if (!a.isDirectory && b.isDirectory) return 1;
         return (b.modified ?? 0) - (a.modified ?? 0);
       }));
-      Alert.alert("Erreur", "Impossible de supprimer le fichier.");
+      Alert.alert(t.common.error, t.library.deleteError);
     }
-  }, [deleteDialog.file, deleteLocalFile]);
+  }, [deleteDialog.file, deleteLocalFile, t]);
 
   const onSharePress = useCallback(async (file: LocalFile) => {
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert("Partage", "Le partage n'est pas disponible sur cet appareil.");
+        Alert.alert(t.common.shareTitle, t.common.shareUnavailable);
         return;
       }
 
@@ -554,7 +555,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
         const tempPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/share_${Date.now()}_${file.name}`;
         const copied = await FolderService.copySafToLocal(file.uri, tempPath);
         if (!copied) {
-          Alert.alert("Erreur", "Impossible de préparer le fichier pour le partage.");
+          Alert.alert(t.common.error, t.library.sharePrepareError);
           return;
         }
         fileUri = `file://${tempPath}`;
@@ -569,9 +570,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
       });
     } catch (e) {
       console.error("Failed to share file", e);
-      Alert.alert("Erreur", "Impossible de partager le fichier.");
+      Alert.alert(t.common.error, t.library.shareError);
     }
-  }, []);
+  }, [t]);
 
   // Refresh on mount or when directory changes
   useEffect(() => {
@@ -591,11 +592,12 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
       palette={p}
       styles={styles}
       accentColor={accent.accent}
+      folderLabel={t.common.folder}
       onPress={onFilePress}
       onDelete={onDeletePress}
       onShare={onSharePress}
     />
-  ), [p, styles, accent, onFilePress, onDeletePress, onSharePress]);
+  ), [p, styles, accent, onFilePress, onDeletePress, onSharePress, t]);
 
   return (
     <View style={styles.container}>
@@ -651,7 +653,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
               if (dirUri) {
                 FolderService.openFileLocation(dirUri).then(opened => {
                   if (!opened) {
-                    Alert.alert("Information", "Impossible d'ouvrir le dossier directement. Veuillez utiliser votre gestionnaire de fichiers.");
+                    Alert.alert(t.common.info, t.library.folderOpenHint);
                   }
                 });
               }
@@ -762,10 +764,10 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
         visible={deleteDialog.visible}
         onClose={() => setDeleteDialog({ visible: false, file: null })}
         onConfirm={confirmDelete}
-        title="Supprimer le fichier ?"
-        message={`Voulez-vous vraiment supprimer "${deleteDialog.file?.name || ""}" ? Cette action est irréversible.`}
-        confirmText="Supprimer"
-        cancelText="Annuler"
+        title={t.library.deleteConfirmTitle}
+        message={t.library.deleteConfirmMsg.replace("{name}", `"${deleteDialog.file?.name || ""}"`)}
+        confirmText={t.common.delete}
+        cancelText={t.common.cancel}
         icon="trash"
         palette={p}
         accent={accent.accent}
