@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { FlashList, FlashListRef } from "@shopify/flash-list";
 
 import { TabId } from "../components/BottomNav";
 import { getT } from "../i18n";
@@ -31,10 +32,19 @@ type AccentType = {
   gradientBright: [string, string];
 };
 
+const getColumnCount = (screenWidth: number) => (screenWidth > 900 ? 3 : screenWidth > 600 ? 2 : 1);
+
+// One FlashList renders the folder grid and the file box: folders are grouped
+// into rows of getColumnCount() cards, and the box is drawn piece by piece.
+type HomeListItem =
+  | { kind: "folders"; key: string; nodes: VkNode[]; isLast: boolean }
+  | { kind: "fileHeader"; key: string }
+  | { kind: "file"; key: string; node: VkNode; isFirst: boolean; isLast: boolean };
+
 const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth: number = 400) => {
   const isLargeTablet = screenWidth > 900;
   const isTablet = screenWidth > 600;
-  const numColumns = isLargeTablet ? 3 : isTablet ? 2 : 1;
+  const numColumns = getColumnCount(screenWidth);
   const gap = isLargeTablet ? spacing.md : spacing.sm;
   const availableWidth = screenWidth - (spacing.lg * 2);
   const itemWidth = (availableWidth - (gap * (numColumns - 1))) / numColumns;
@@ -70,7 +80,8 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     crumb: { flexDirection: "row", alignItems: "center", gap: 6, marginRight: 8, flexShrink: 0, backgroundColor: `${p.surface}`, paddingHorizontal: 12, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1, borderColor: `${p.border}50`, minHeight: 40 },
     crumbText: { color: p.muted, fontSize: 14, fontWeight: "700" },
     container: { flex: 1 },
-    content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs, gap: spacing.xs },
+    content: { paddingHorizontal: spacing.lg },
+    listHeader: { gap: spacing.xs, paddingBottom: spacing.xs },
     statsRow: { flexDirection: "row", backgroundColor: p.surface, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: `${a.accent}30`, alignItems: "center" },
     statItem: { flex: 1, alignItems: "center" },
     statValue: { color: a.accentBright, fontSize: 18, fontWeight: "900" },
@@ -85,7 +96,8 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     errorText: { color: p.muted, fontWeight: "700", flex: 1 },
     infoPill: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: radius.lg, borderWidth: 1, borderColor: `${a.accent}55`, backgroundColor: `${a.accent}12` },
     infoText: { color: p.muted, fontWeight: "700", flex: 1, fontSize: 12 },
-    folderList: { flexDirection: "row", flexWrap: "wrap", gap: gap, marginBottom: spacing.lg },
+    folderGridRow: { flexDirection: "row", gap: gap, marginBottom: gap },
+    folderGridRowLast: { marginBottom: spacing.lg },
     folderRow: {
       flexDirection: isTablet ? "column" : "row",
       alignItems: isTablet ? "flex-start" : "center",
@@ -103,7 +115,15 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     folderRowTitle: { flex: 1, color: p.text, fontSize: isTablet ? 14 : 16, fontWeight: "900" },
     searchCountRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: spacing.xs },
     searchCountText: { color: a.accentBright, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
-    fileBox: { backgroundColor: p.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: `${p.border}50`, overflow: "hidden" },
+    fileBoxTop: {
+      backgroundColor: p.surface,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      borderWidth: 1,
+      borderBottomWidth: 0,
+      borderColor: `${p.border}50`,
+      overflow: "hidden",
+    },
     fileBoxHeader: {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.sm,
@@ -117,7 +137,21 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     bulkBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: `${a.accent}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.sm },
     bulkBtnText: { color: a.accentBright, fontSize: 11, fontWeight: "900" },
     fileBoxTitle: { color: p.text, fontWeight: "900", fontSize: 12 },
-    fileList: { padding: spacing.lg, gap: spacing.md },
+    fileItem: {
+      backgroundColor: p.surface,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderColor: `${p.border}50`,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+    },
+    fileItemFirst: { paddingTop: spacing.lg },
+    fileItemLast: {
+      borderBottomWidth: 1,
+      borderBottomLeftRadius: radius.lg,
+      borderBottomRightRadius: radius.lg,
+      paddingBottom: spacing.lg,
+    },
     fileRowContainer: { gap: 8, paddingVertical: 4 },
     fileRow: { flexDirection: "row", gap: spacing.md, alignItems: "center" },
     fileText: { flex: 1, gap: 4 },
@@ -410,10 +444,108 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
     [uniqueDisplayNodes],
   );
 
-  const findDownloadState = (node: VkNode) => {
-    if (!node.url) return null;
-    return downloads.find((d) => d.url === node.url) ?? null;
-  };
+  // The newest download for a URL wins, as `downloads` lists newest first.
+  const downloadByUrl = useMemo(() => {
+    const map = new Map<string, DownloadItem>();
+    for (const d of downloads) {
+      if (d.url && !map.has(d.url)) map.set(d.url, d);
+    }
+    return map;
+  }, [downloads]);
+
+  const findDownloadState = useCallback(
+    (node: VkNode) => (node.url ? downloadByUrl.get(node.url) ?? null : null),
+    [downloadByUrl],
+  );
+
+  const isAnyFileActive = useMemo(
+    () => fileNodes.some((node) => {
+      const d = findDownloadState(node);
+      return !!d && ["downloading", "pending", "paused"].includes(d.status);
+    }),
+    [fileNodes, findDownloadState],
+  );
+
+  const numColumns = getColumnCount(screenWidth);
+  const listItems = useMemo<HomeListItem[]>(() => {
+    if (!syncedData) return [];
+    const items: HomeListItem[] = [];
+    for (let i = 0; i < folderNodes.length; i += numColumns) {
+      const nodes = folderNodes.slice(i, i + numColumns);
+      items.push({ kind: "folders", key: `folders-${nodes[0].id}`, nodes, isLast: i + numColumns >= folderNodes.length });
+    }
+    if (fileNodes.length > 0) {
+      items.push({ kind: "fileHeader", key: "file-header" });
+      fileNodes.forEach((node, index) => {
+        items.push({ kind: "file", key: node.id, node, isFirst: index === 0, isLast: index === fileNodes.length - 1 });
+      });
+    }
+    return items;
+  }, [syncedData, folderNodes, fileNodes, numColumns]);
+
+  // FlashList keeps its scroll offset when the data changes: start each folder at the top.
+  const listRef = useRef<FlashListRef<HomeListItem>>(null);
+  const currentFolderId = navPath[navPath.length - 1]?.id;
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [currentFolderId]);
+
+  const openLibrary = useCallback(() => onNavigate?.("library"), [onNavigate]);
+
+  const renderListItem = useCallback(({ item }: { item: HomeListItem }) => {
+    if (item.kind === "folders") {
+      return (
+        <View style={[styles.folderGridRow, item.isLast && styles.folderGridRowLast]}>
+          {item.nodes.map((node) => (
+            <FolderRow key={node.id} node={node} palette={p} accent={accent} styles={styles} onPress={openNode} />
+          ))}
+        </View>
+      );
+    }
+    if (item.kind === "fileHeader") {
+      return (
+        <View style={styles.fileBoxTop}>
+          <View style={styles.fileBoxHeader}>
+            <Text style={styles.fileBoxTitle}>{fileNodes.length} {t.nav.downloads.toLowerCase()}</Text>
+            <Pressable
+              onPress={() => void (isAnyFileActive ? cancelAll() : downloadAll(fileNodes))}
+              style={({ pressed }) => [styles.bulkBtn, isAnyFileActive && { backgroundColor: `${p.danger}15` }, pressed && { opacity: 0.7 }]}
+            >
+              <Ionicons
+                name={isAnyFileActive ? "close-circle-outline" : "cloud-download-outline"}
+                size={14}
+                color={isAnyFileActive ? p.danger : p.primaryBright}
+              />
+              <Text style={[styles.bulkBtnText, isAnyFileActive && { color: p.danger }]}>
+                {isAnyFileActive ? "Tout annuler" : "Tout télécharger"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.fileItem, item.isFirst && styles.fileItemFirst, item.isLast && styles.fileItemLast]}>
+        <FileRow
+          node={item.node}
+          palette={p}
+          accent={accent}
+          styles={styles}
+          download={findDownloadState(item.node)}
+          t={t}
+          onDownload={addDownload}
+          onPause={pauseDownload}
+          onResume={resumeDownload}
+          onCancel={cancelDownload}
+          onOpen={setReadingFile}
+          onNavigateLibrary={openLibrary}
+        />
+      </View>
+    );
+  }, [
+    styles, p, accent, t, openNode, fileNodes, isAnyFileActive, findDownloadState, openLibrary,
+    addDownload, pauseDownload, resumeDownload, cancelDownload, cancelAll, downloadAll, setReadingFile,
+  ]);
 
   return (
     <View style={[styles.root, { backgroundColor: p.background }]}>
@@ -505,161 +637,113 @@ export const HomeScreen: React.FC<{ isActive?: boolean, onNavigate?: (tab: TabId
         </View>
       </View>
 
-      <ScrollView
+      <FlashList
+        ref={listRef}
         style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-      >
-        {token && !navPath.length && !searchQuery && (
-          <LinearGradient
-            colors={[`${accent.accent}30`, `${p.surface}80`]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.statsRow}
-          >
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{stats.indexed}</Text>
-              <Text style={styles.statLabel}>{t.home.statsIndexed}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{downloadCounts.downloaded}</Text>
-              <Text style={styles.statLabel}>{t.home.statsDownloaded}</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{downloadCounts.inProgress}</Text>
-              <Text style={styles.statLabel}>{t.home.statsInProgress || "En cours"}</Text>
-            </View>
-          </LinearGradient>
-        )}
-
-        {!token && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>{t.browser.noTokenTitle}</Text>
-            <Text style={styles.emptySubtitle}>{t.browser.noTokenSubtitle}</Text>
-            <Pressable
-              style={[styles.primaryCta, isSigningIn && { opacity: 0.65 }]}
-              onPress={() => void signIn()}
-              disabled={isSigningIn}
-            >
-              {isSigningIn ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="logo-vk" size={16} color={p.background === "#F5F1E8" ? p.text : "#fff"} />
-              )}
-              <Text style={styles.primaryCtaText}>
-                {isSigningIn ? t.settings.signingIn : t.settings.signIn}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
-        {token && !syncedData && !isSyncing && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>{t.browser.emptyTitle}</Text>
-            <Text style={styles.emptySubtitle}>{t.browser.emptySubtitle}</Text>
-            <Pressable
-              style={styles.primaryCta}
-              onPress={() => void syncAll()}
-            >
-              <Ionicons name="sync" size={16} color="#fff" />
-              <Text style={styles.primaryCtaText}>{t.browser.sync || "Synchroniser"}</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {error && (
-          <View style={styles.errorPill}>
-            <Ionicons name="alert-circle-outline" size={16} color={p.danger} />
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
-        {syncedData && (
-          <>
-            {searchQuery && (
-              <View style={styles.searchCountRow}>
-                <Ionicons name="search" size={12} color={p.primaryBright} />
-                <Text style={styles.searchCountText}>
-                  {displayNodes.length} {t.browser.results || "résultat(s)"}
-                </Text>
-              </View>
+        data={listItems}
+        keyExtractor={(item) => item.key}
+        getItemType={(item) => item.kind}
+        renderItem={renderListItem}
+        ListFooterComponent={<View style={{ height: 90 }} />}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            {token && !navPath.length && !searchQuery && (
+              <LinearGradient
+                colors={[`${accent.accent}30`, `${p.surface}80`]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.statsRow}
+              >
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{stats.indexed}</Text>
+                  <Text style={styles.statLabel}>{t.home.statsIndexed}</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{downloadCounts.downloaded}</Text>
+                  <Text style={styles.statLabel}>{t.home.statsDownloaded}</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{downloadCounts.inProgress}</Text>
+                  <Text style={styles.statLabel}>{t.home.statsInProgress || "En cours"}</Text>
+                </View>
+              </LinearGradient>
             )}
 
-            {showIndexHint && (
-              <View style={styles.infoPill}>
-                <Ionicons name="information-circle-outline" size={14} color={p.primaryBright} />
-                <Text style={styles.infoText}>{t.browser.searchIndexHint}</Text>
-              </View>
-            )}
-
-            {showSearchEmpty && (
+            {!token && (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>{t.browser.searchEmptyTitle}</Text>
-                <Text style={styles.emptySubtitle}>{t.browser.searchEmptySubtitle}</Text>
+                <Text style={styles.emptyTitle}>{t.browser.noTokenTitle}</Text>
+                <Text style={styles.emptySubtitle}>{t.browser.noTokenSubtitle}</Text>
+                <Pressable
+                  style={[styles.primaryCta, isSigningIn && { opacity: 0.65 }]}
+                  onPress={() => void signIn()}
+                  disabled={isSigningIn}
+                >
+                  {isSigningIn ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="logo-vk" size={16} color={p.background === "#F5F1E8" ? p.text : "#fff"} />
+                  )}
+                  <Text style={styles.primaryCtaText}>
+                    {isSigningIn ? t.settings.signingIn : t.settings.signIn}
+                  </Text>
+                </Pressable>
               </View>
             )}
 
-            {folderNodes.length > 0 && (
-              <View style={styles.folderList}>
-                {folderNodes.map((node: VkNode) => (
-                  <FolderRow key={node.id} node={node} palette={p} accent={accent} styles={styles} onPress={openNode} />
-                ))}
+            {token && !syncedData && !isSyncing && (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>{t.browser.emptyTitle}</Text>
+                <Text style={styles.emptySubtitle}>{t.browser.emptySubtitle}</Text>
+                <Pressable
+                  style={styles.primaryCta}
+                  onPress={() => void syncAll()}
+                >
+                  <Ionicons name="sync" size={16} color="#fff" />
+                  <Text style={styles.primaryCtaText}>{t.browser.sync || "Synchroniser"}</Text>
+                </Pressable>
               </View>
             )}
 
-            {fileNodes.length > 0 && (
-              <View style={styles.fileBox}>
-                <View style={styles.fileBoxHeader}>
-                  <Text style={styles.fileBoxTitle}>{fileNodes.length} {t.nav.downloads.toLowerCase()}</Text>
-                  {(() => {
-                    const isAnyFileActive = fileNodes.some(node => {
-                      const d = findDownloadState(node);
-                      return d && ['downloading', 'pending', 'paused'].includes(d.status);
-                    });
-                    return (
-                      <Pressable
-                        onPress={() => void (isAnyFileActive ? cancelAll() : downloadAll(fileNodes))}
-                        style={({ pressed }) => [styles.bulkBtn, isAnyFileActive && { backgroundColor: `${p.danger}15` }, pressed && { opacity: 0.7 }]}
-                      >
-                        <Ionicons
-                          name={isAnyFileActive ? "close-circle-outline" : "cloud-download-outline"}
-                          size={14}
-                          color={isAnyFileActive ? p.danger : p.primaryBright}
-                        />
-                        <Text style={[styles.bulkBtnText, isAnyFileActive && { color: p.danger }]}>
-                          {isAnyFileActive ? "Tout annuler" : "Tout télécharger"}
-                        </Text>
-                      </Pressable>
-                    );
-                  })()}
-                </View>
-                <View style={styles.fileList}>
-                  {fileNodes.map((node: VkNode) => (
-                    <FileRow
-                      key={node.id}
-                      node={node}
-                      palette={p}
-                      accent={accent}
-                      styles={styles}
-                      download={findDownloadState(node)}
-                      t={t}
-                      onDownload={addDownload}
-                      onPause={pauseDownload}
-                      onResume={resumeDownload}
-                      onCancel={cancelDownload}
-                      onOpen={setReadingFile}
-                      onNavigateLibrary={() => onNavigate?.("library")}
-                    />
-                  ))}
-                </View>
+            {error && (
+              <View style={styles.errorPill}>
+                <Ionicons name="alert-circle-outline" size={16} color={p.danger} />
+                <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
-          </>
-        )}
-        <View style={{ height: 90 }} />
-      </ScrollView >
+
+            {syncedData && (
+              <>
+                {searchQuery && (
+                  <View style={styles.searchCountRow}>
+                    <Ionicons name="search" size={12} color={p.primaryBright} />
+                    <Text style={styles.searchCountText}>
+                      {displayNodes.length} {t.browser.results || "résultat(s)"}
+                    </Text>
+                  </View>
+                )}
+
+                {showIndexHint && (
+                  <View style={styles.infoPill}>
+                    <Ionicons name="information-circle-outline" size={14} color={p.primaryBright} />
+                    <Text style={styles.infoText}>{t.browser.searchIndexHint}</Text>
+                  </View>
+                )}
+
+                {showSearchEmpty && (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyTitle}>{t.browser.searchEmptyTitle}</Text>
+                    <Text style={styles.emptySubtitle}>{t.browser.searchEmptySubtitle}</Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        }
+      />
 
       {(isSyncing || isLoadingNode) && (
         <View style={styles.loadingOverlay}>
