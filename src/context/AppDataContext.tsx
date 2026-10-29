@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { InteractionManager, Platform } from "react-native";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, InteractionManager, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import ReactNativeBlobUtil from "react-native-blob-util";
@@ -61,6 +61,8 @@ const DownloadsContext = createContext<DownloadsContextType | null>(null);
 
 // Progress ticks would rewrite the saved list several times a second.
 const DOWNLOADS_SAVE_INTERVAL_MS = 5000;
+// Backstop for saving the catalog when the app stays in the foreground.
+const SYNCED_DATA_IDLE_SAVE_MS = 30000;
 
 
 const isSafUri = (uri: string) => uri?.startsWith("content://");
@@ -290,6 +292,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const pendingProgressRef = useRef(new Map<string, Partial<DownloadItem>>());
   const retryCountRef = useRef(new Map<string, number>());
   const downloadUrlRefreshNeededRef = useRef(new Set<string>());
+  const lastSavedSyncedDataRef = useRef<VkNode[] | null>(null);
   const lastNotifRef = useRef(new Map<string, number>()); // Throttle notifications to 1s
   const MAX_AUTO_RETRIES = 3;
   const RETRY_DELAY_MS = 2000; // 2 seconds between retries
@@ -966,7 +969,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
           AsyncStorage.getItem(STORAGE_KEYS.hasFullSynced),
         ]);
         if (cancelled) return;
-        if (treeRaw) setSyncedData(JSON.parse(treeRaw));
+        if (treeRaw) {
+          const tree: VkNode[] = JSON.parse(treeRaw);
+          lastSavedSyncedDataRef.current = tree;
+          setSyncedData(tree);
+        }
         if (downloadsRaw) {
           const parsed: DownloadItem[] = JSON.parse(downloadsRaw);
           const normalized = await Promise.all(parsed.map(async (d) => {
@@ -1019,12 +1026,30 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => { cancelled = true; };
   }, []);
 
+  // Serializing the whole catalog blocks the JS thread for a moment. Saving it
+  // after every opened folder made scrolling stutter, so it is saved when the
+  // app leaves the foreground, or after a long idle period as a backstop.
+  const syncedDataRef = useRef(syncedData);
+  syncedDataRef.current = syncedData;
+  const saveSyncedData = useCallback(() => {
+    const data = syncedDataRef.current;
+    if (!data || data === lastSavedSyncedDataRef.current) return;
+    lastSavedSyncedDataRef.current = data;
+    AsyncStorage.setItem(STORAGE_KEYS.syncedData, JSON.stringify(data)).catch(() => { });
+  }, []);
+
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (syncedData) AsyncStorage.setItem(STORAGE_KEYS.syncedData, JSON.stringify(syncedData));
-    }, 500);
-    return () => clearTimeout(t);
-  }, [syncedData]);
+    if (!syncedData || syncedData === lastSavedSyncedDataRef.current) return;
+    const handle = setTimeout(saveSyncedData, SYNCED_DATA_IDLE_SAVE_MS);
+    return () => clearTimeout(handle);
+  }, [syncedData, saveSyncedData]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") saveSyncedData();
+    });
+    return () => subscription.remove();
+  }, [saveSyncedData]);
 
   useEffect(() => {
     if (!isReady || !autoSync) return;
@@ -1078,8 +1103,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, [rawCurrentNodes, debouncedQuery]);
 
+  // Walking and normalizing the whole catalog is only worth it while searching;
+  // otherwise every opened folder (a new syncedData) would rebuild it.
+  const isSearching = normalizeText(debouncedQuery).length > 0;
   const searchIndex = useMemo(() => {
-    if (!syncedData) return [];
+    if (!syncedData || !isSearching) return [];
     const index: Array<{ id: string; node: VkNode; normalizedTitle: string }> = [];
     const stack: VkNode[] = [...syncedData];
     const seenIds = new Set<string>();
@@ -1094,7 +1122,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
     return index;
-  }, [syncedData]);
+  }, [syncedData, isSearching]);
 
   const globalSearchNodes = useMemo(() => {
     const q = normalizeText(debouncedQuery);
