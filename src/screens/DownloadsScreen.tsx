@@ -132,8 +132,10 @@ const DownloadCard = React.memo<DownloadCardProps>(({
             <Text style={[styles.statusBadgeText, { color: p.danger }]}>{t.downloads.statusError}</Text>
           </View>
         )}
-        {item.status === 'error' && item.errorReason === 'vkUnavailable' && (
-          <Text style={styles.errorDetail}>{t.downloads.errorVkUnavailable}</Text>
+        {item.status === 'error' && item.errorReason && (
+          <Text style={styles.errorDetail}>
+            {item.errorReason === 'vkDeleted' ? t.downloads.errorVkDeleted : t.downloads.errorVkUnavailable}
+          </Text>
         )}
 
         {item.status === 'canceled' && (

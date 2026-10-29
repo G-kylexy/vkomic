@@ -252,6 +252,11 @@ const FileRow = memo<FileRowProps>(({
           <Text style={styles.fileSub} numberOfLines={1}>
             {node.extension || "FILE"}
           </Text>
+          {d?.status === "error" && d.errorReason && (
+            <Text style={[styles.fileSub, { color: p.danger }]} numberOfLines={1}>
+              {d.errorReason === "vkDeleted" ? t.downloads.labelVkDeleted : t.downloads.labelVkUnavailable}
+            </Text>
+          )}
         </View>
 
         <View style={styles.fileActionsRow}>

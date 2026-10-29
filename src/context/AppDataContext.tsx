@@ -161,10 +161,15 @@ const validateIosDownload = async (result: any, item: DownloadItem) => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// VK's file storage answers some files with an instant 5xx "temporarily
-// unavailable" page, for days at a time: retrying straight away cannot help.
-const isVkStorageUnavailable = (error: unknown) =>
-  error instanceof Error && /HTTP Error: 5\d\d\b/.test(error.message);
+// Refusals that retrying straight away cannot fix: VK's file storage answers
+// some files with an instant 5xx "temporarily unavailable" page for days, and
+// deleted files with its "Fichier non disponible ou supprimé" HTML page.
+const vkRefusalReason = (error: unknown): DownloadItem["errorReason"] => {
+  if (!(error instanceof Error)) return undefined;
+  if (/HTTP Error: 5\d\d\b/.test(error.message)) return "vkUnavailable";
+  if (error.message.includes("HTML page instead of the requested file")) return "vkDeleted";
+  return undefined;
+};
 
 // Anyone can post on the VK board: never save files that install or run when opened.
 const BLOCKED_EXTENSIONS = new Set([
@@ -707,15 +712,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const isCanceled = err?.message?.includes('canceled') || err?.message?.includes('Canceled');
         if (!isCanceled) {
-          const vkUnavailable = isVkStorageUnavailable(err);
+          const refusal = vkRefusalReason(err);
           // Auto-retries only restart downloads in the "error" state; left in
           // "downloading", the item stayed at 0% and kept its queue slot forever.
           upsertDownload(item.id, {
             status: "error",
             speed: "",
-            ...(vkUnavailable ? { errorReason: "vkUnavailable" as const } : {}),
+            ...(refusal ? { errorReason: refusal } : {}),
           });
-          if (vkUnavailable || !scheduleAutoRetry(item.id, item.title)) {
+          if (refusal || !scheduleAutoRetry(item.id, item.title)) {
             NativeNotification.cancelNotification(item.id);
             NativeNotification.showErrorNotification(item.id, item.title);
           }
@@ -768,7 +773,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       resumablesRef.current.delete(item.id);
       startingRef.current.delete(item.id);
       clearSpeed(speedRef, item.id);
-      const vkUnavailable = isVkStorageUnavailable(err);
+      const refusal = vkRefusalReason(err);
 
       setDownloads((prev) => {
         const d = prev.find(x => x.id === item.id);
@@ -780,14 +785,14 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
             ...next[idx],
             status: 'error',
             speed: "",
-            ...(vkUnavailable ? { errorReason: "vkUnavailable" as const } : {}),
+            ...(refusal ? { errorReason: refusal } : {}),
           };
         }
         return next;
       });
 
       const isManualPause = item.status === 'paused';
-      if (!isManualPause && !vkUnavailable) {
+      if (!isManualPause && !refusal) {
         scheduleAutoRetry(item.id, item.title);
       }
     }

@@ -94,6 +94,9 @@ export type Translations = {
     statusCanceled: string;
     statusError: string;
     errorVkUnavailable: string;
+    errorVkDeleted: string;
+    labelVkUnavailable: string;
+    labelVkDeleted: string;
     emptyTitle: string;
     emptySubtitle: string;
     actionPause: string;
@@ -198,6 +201,9 @@ const translations: Record<Language, Translations> = {
       statusCanceled: "Annulé",
       statusError: "Erreur",
       errorVkUnavailable: "VK ne fournit pas ce fichier pour l'instant. Réessaie plus tard.",
+      errorVkDeleted: "VK indique que ce fichier n'est plus disponible ou a été supprimé.",
+      labelVkUnavailable: "Indisponible sur VK",
+      labelVkDeleted: "Supprimé sur VK",
       emptyTitle: "Aucun téléchargement",
       emptySubtitle: "Lance un téléchargement depuis l'onglet Accueil.",
       actionPause: "Pause",
@@ -331,6 +337,9 @@ const translations: Record<Language, Translations> = {
       statusCanceled: "Canceled",
       statusError: "Error",
       errorVkUnavailable: "VK is not serving this file right now. Try again later.",
+      errorVkDeleted: "VK says this file is no longer available or was deleted.",
+      labelVkUnavailable: "Unavailable on VK",
+      labelVkDeleted: "Deleted on VK",
       emptyTitle: "No downloads",
       emptySubtitle: "Start a download from the Home tab.",
       actionPause: "Pause",
@@ -464,6 +473,9 @@ const translations: Record<Language, Translations> = {
       statusCanceled: "Отменено",
       statusError: "Ошибка",
       errorVkUnavailable: "VK сейчас не отдаёт этот файл. Попробуй позже.",
+      errorVkDeleted: "VK сообщает, что файл недоступен или удалён.",
+      labelVkUnavailable: "Недоступен в VK",
+      labelVkDeleted: "Удалён в VK",
       emptyTitle: "Загрузок нет",
       emptySubtitle: "Запусти загрузку во вкладке Главная.",
       actionPause: "Пауза",
