@@ -1,5 +1,9 @@
 package com.anonymous.vkomicmobile
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -18,6 +22,7 @@ import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.zip.ZipInputStream
 
 class NativeDownloadModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -143,6 +148,195 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
     private val executor = Executors.newFixedThreadPool(3)
     private val activeDownloads = ConcurrentHashMap<String, DownloadTask>()
 
+    /**
+     * Document URI of the folder a SAF URI points to. The download folder picked
+     * in Settings is a tree root, but a sub-folder ("tree/<root>/document/<root>/truc")
+     * must keep its own document ID: getTreeDocumentId would always give the root.
+     */
+    private fun folderDocumentUri(folderUri: String): Uri {
+        val uri = Uri.parse(folderUri)
+        val docId = if (DocumentsContract.isDocumentUri(reactApplicationContext, uri)) {
+            DocumentsContract.getDocumentId(uri)
+        } else {
+            DocumentsContract.getTreeDocumentId(uri)
+        }
+        return DocumentsContract.buildDocumentUriUsingTree(uri, docId)
+    }
+
+    /** Finds the child folder [name] in [parent], or creates it. */
+    private fun findOrCreateSubfolder(parent: Uri, name: String): Uri {
+        val resolver = reactApplicationContext.contentResolver
+        val parentId = DocumentsContract.getDocumentId(parent)
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(parent, parentId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE
+        )
+        resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val childName = cursor.getString(1) ?: continue
+                if (cursor.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR &&
+                    childName.equals(name, ignoreCase = true)
+                ) {
+                    return DocumentsContract.buildDocumentUriUsingTree(parent, cursor.getString(0))
+                }
+            }
+        }
+        return DocumentsContract.createDocument(
+            resolver, parent, DocumentsContract.Document.MIME_TYPE_DIR, name
+        ) ?: throw IOException("Failed to create SAF folder: $name")
+    }
+
+    /**
+     * Returns the document URI of the sub-folder [name] inside [folderUri],
+     * creating it when missing (one folder per comic: "truc/truc 01.pdf").
+     */
+    @ReactMethod
+    fun ensureSafSubfolder(folderUri: String, name: String, promise: Promise) {
+        executor.submit {
+            try {
+                promise.resolve(findOrCreateSubfolder(folderDocumentUri(folderUri), name).toString())
+            } catch (e: SecurityException) {
+                promise.reject("PERMISSION_DENIED", e.message)
+            } catch (e: Exception) {
+                promise.reject("SAF_FOLDER_ERROR", e.message)
+            }
+        }
+    }
+
+    // Covers are rendered one at a time, away from the download threads.
+    private val coverExecutor = Executors.newSingleThreadExecutor()
+    private val coverImageExtensions = setOf("jpg", "jpeg", "png", "webp")
+
+    /** Sort key so "T2" comes before "T10". */
+    private fun naturalKey(name: String): String =
+        Regex("\\d+").replace(name.lowercase()) { it.value.padStart(8, '0') }
+
+    private fun saveCover(bitmap: Bitmap, target: File): String {
+        val partial = File(target.path + ".part")
+        FileOutputStream(partial).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 82, it) }
+        bitmap.recycle()
+        partial.renameTo(target)
+        return "file://${target.absolutePath}"
+    }
+
+    private fun renderPdfCover(uri: Uri, width: Int): Bitmap? {
+        val pfd = reactApplicationContext.contentResolver.openFileDescriptor(uri, "r") ?: return null
+        val renderer = PdfRenderer(pfd) // takes ownership of pfd
+        try {
+            if (renderer.pageCount == 0) return null
+            val page = renderer.openPage(0)
+            try {
+                val height = (width.toDouble() * page.height / page.width).toInt().coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                return bitmap
+            } finally {
+                page.close()
+            }
+        } finally {
+            renderer.close()
+        }
+    }
+
+    /** First image of a CBZ archive, by natural name order (page 1 is the cover). */
+    private fun renderCbzCover(uri: Uri, width: Int): Bitmap? {
+        val resolver = reactApplicationContext.contentResolver
+        val names = mutableListOf<String>()
+        resolver.openInputStream(uri)?.use { raw ->
+            ZipInputStream(raw.buffered()).use { zip ->
+                generateSequence { zip.nextEntry }.forEach { entry ->
+                    val ext = entry.name.substringAfterLast('.', "").lowercase()
+                    if (!entry.isDirectory && ext in coverImageExtensions &&
+                        !entry.name.substringAfterLast('/').startsWith(".")
+                    ) names.add(entry.name)
+                }
+            }
+        }
+        val first = names.minByOrNull { naturalKey(it) } ?: return null
+        val bytes = resolver.openInputStream(uri)?.use { raw ->
+            ZipInputStream(raw.buffered()).use { zip ->
+                generateSequence { zip.nextEntry }.firstOrNull { it.name == first }?.let { zip.readBytes() }
+            }
+        } ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= width) sample *= 2
+        val decoded = BitmapFactory.decodeByteArray(
+            bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }
+        ) ?: return null
+        if (decoded.width <= width) return decoded
+        val scaled = Bitmap.createScaledBitmap(
+            decoded, width, (width.toDouble() * decoded.height / decoded.width).toInt().coerceAtLeast(1), true
+        )
+        if (scaled != decoded) decoded.recycle()
+        return scaled
+    }
+
+    /**
+     * Cover of a comic folder: page 1 of its first PDF or CBZ, sorted by name.
+     * Resolves a cached JPEG's file:// URI, or null when the folder holds no
+     * readable album (CBR archives cannot be opened natively).
+     */
+    @ReactMethod
+    fun getFolderCover(folderUri: String, width: Int, promise: Promise) {
+        coverExecutor.submit {
+            try {
+                val folder = folderDocumentUri(folderUri)
+                val resolver = reactApplicationContext.contentResolver
+                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+                    folder, DocumentsContract.getDocumentId(folder)
+                )
+                data class Album(val id: String, val name: String, val size: Long, val modified: Long)
+                val albums = mutableListOf<Album>()
+                resolver.query(
+                    childrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_SIZE,
+                        DocumentsContract.Document.COLUMN_LAST_MODIFIED
+                    ),
+                    null, null, null
+                )?.use { c ->
+                    while (c.moveToNext()) {
+                        val name = c.getString(1) ?: continue
+                        val ext = name.substringAfterLast('.', "").lowercase()
+                        if (ext == "pdf" || ext == "cbz") {
+                            albums.add(Album(c.getString(0), name, c.getLong(2), c.getLong(3)))
+                        }
+                    }
+                }
+                val album = albums.minByOrNull { naturalKey(it.name) }
+                if (album == null) {
+                    promise.resolve(null)
+                    return@submit
+                }
+
+                val dir = File(reactApplicationContext.cacheDir, "folder_covers").apply { mkdirs() }
+                val target = File(dir, "${album.id.hashCode()}_${album.size}_${album.modified}_w$width.jpg")
+                if (target.length() > 0) {
+                    promise.resolve("file://${target.absolutePath}")
+                    return@submit
+                }
+
+                val albumUri = DocumentsContract.buildDocumentUriUsingTree(folder, album.id)
+                val bitmap = if (album.name.lowercase().endsWith(".pdf")) {
+                    renderPdfCover(albumUri, width)
+                } else {
+                    renderCbzCover(albumUri, width)
+                }
+                promise.resolve(bitmap?.let { saveCover(it, target) })
+            } catch (e: Throwable) {
+                // A damaged or half-downloaded album just keeps the folder icon.
+                promise.resolve(null)
+            }
+        }
+    }
+
     override fun getName(): String = "NativeDownloadModule"
 
     private fun sendEvent(eventName: String, params: WritableMap) {
@@ -262,11 +456,9 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
         executor.submit {
             try {
                 val context = reactApplicationContext.applicationContext
-                val treeUri = Uri.parse(folderUri)
-                
-                // Extraire le document ID de l'arbre
-                val docId = DocumentsContract.getTreeDocumentId(treeUri)
-                
+                val treeUri = folderDocumentUri(folderUri)
+                val docId = DocumentsContract.getDocumentId(treeUri)
+
                 // Construire l'URI des enfants
                 val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
 
@@ -337,11 +529,7 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
 
                 val context = reactApplicationContext.applicationContext
                 val resolver = context.contentResolver
-                val treeUri = Uri.parse(folderUri)
-                
-                // 1. Convert Tree URI to Document ID if needed
-                val docId = DocumentsContract.getTreeDocumentId(treeUri)
-                val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                val dirUri = folderDocumentUri(folderUri)
 
                 // 2. Create the file
                 // Note: Generic "createDocument" might duplicate filenames (file(1).pdf).
@@ -646,9 +834,7 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
                 var startByte: Long = 0
                 
                 if (createdUri == null) {
-                    val treeUri = Uri.parse(safFolderUri)
-                    val docId = DocumentsContract.getTreeDocumentId(treeUri)
-                    val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                    val dirUri = folderDocumentUri(safFolderUri)
                     
                     val safeName = prepareSafFileName(fileName, mimeType)
                     createdUri = DocumentsContract.createDocument(resolver, dirUri, mimeType, safeName)
@@ -666,10 +852,8 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
                         }
                     } catch (e: Exception) {
                         // Si l'URI n'existe plus ou erreur, repartir de zéro
-                        val treeUri = Uri.parse(safFolderUri)
-                        val docId = DocumentsContract.getTreeDocumentId(treeUri)
-                        val dirUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
-                        createdUri = DocumentsContract.createDocument(resolver, dirUri, mimeType, fileName)
+                        val dirUri = folderDocumentUri(safFolderUri)
+                        createdUri = DocumentsContract.createDocument(resolver, dirUri, mimeType, prepareSafFileName(fileName, mimeType))
                             ?: throw IOException("Failed to recreate SAF document: $fileName")
                         startByte = 0
                     }

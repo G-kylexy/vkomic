@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import { Pressable, FlatList, ScrollView, StyleSheet, Text, View, Alert, ListRenderItemInfo, Platform, Animated, Easing, BackHandler, useWindowDimensions } from "react-native";
+import { Pressable, FlatList, ScrollView, StyleSheet, Text, View, Alert, ListRenderItemInfo, Platform, Animated, Easing, BackHandler, useWindowDimensions, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 // Expo SDK 54+: pour garder `documentDirectory` + `readDirectoryAsync` on passe par l'API legacy.
@@ -15,6 +15,7 @@ import { getT } from "../i18n";
 import { palette as defaultPalette, radius, spacing, tabAccents } from "../theme";
 import * as FolderService from "../services/FolderService";
 import { SafError, SafErrorType } from "../services/FolderService";
+import { nativeDownload } from "../services/NativeDownload";
 
 type LocalFile = {
   name: string;
@@ -85,8 +86,33 @@ const SkeletonRow = React.memo<{ styles: any, palette: typeof defaultPalette }>(
   );
 });
 
+// Jaquettes déjà trouvées pendant la session (le natif garde aussi un cache disque).
+const folderCoverCache = new Map<string, string>();
+const COVER_WIDTH = 260; // net jusqu'à 84 dp de large sur tablette
+
+/** Jaquette d'un dossier de BD : page 1 de son premier tome, sinon null. */
+const useFolderCover = (file: LocalFile): string | null => {
+  const enabled = file.isDirectory && Platform.OS === "android" && file.uri.startsWith("content://");
+  const [cover, setCover] = useState<string | null>(() => folderCoverCache.get(file.uri) ?? null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    // Pas de cache des échecs : un dossier vide aura sa jaquette après un téléchargement.
+    void nativeDownload.getFolderCover(file.uri, COVER_WIDTH).then((uri) => {
+      if (!uri) return;
+      folderCoverCache.set(file.uri, uri);
+      if (alive) setCover(uri);
+    });
+    return () => { alive = false; };
+  }, [enabled, file.uri, file.modified]);
+
+  return enabled ? cover : null;
+};
+
 const LibraryFileRow = React.memo<LibraryFileRowProps>(({ file: f, palette: p, styles, accentColor, folderLabel, onPress, onDelete, onShare }) => {
   const isGrid = styles.fileContainer.width !== undefined;
+  const cover = useFolderCover(f);
 
   return (
     <View style={styles.fileContainer}>
@@ -98,13 +124,17 @@ const LibraryFileRow = React.memo<LibraryFileRowProps>(({ file: f, palette: p, s
           ]}
           onPress={() => void onPress(f)}
         >
-          <View style={[styles.fileIcon, f.isDirectory && { backgroundColor: `${p.primary}15`, borderColor: `${p.primary}30` }]}>
-            <Ionicons
-              name={f.isDirectory ? "folder" : (f.name.toLowerCase().endsWith(".pdf") ? "book-outline" : "document-text-outline")}
-              size={18}
-              color={f.isDirectory ? p.primary : (f.name.toLowerCase().endsWith(".pdf") ? p.primaryBright : p.muted)}
-            />
-          </View>
+          {cover ? (
+            <Image source={{ uri: cover }} style={styles.folderCover} resizeMode="cover" />
+          ) : (
+            <View style={[styles.fileIcon, f.isDirectory && { backgroundColor: `${p.primary}15`, borderColor: `${p.primary}30` }]}>
+              <Ionicons
+                name={f.isDirectory ? "folder" : (f.name.toLowerCase().endsWith(".pdf") ? "book-outline" : "document-text-outline")}
+                size={18}
+                color={f.isDirectory ? p.primary : (f.name.toLowerCase().endsWith(".pdf") ? p.primaryBright : p.muted)}
+              />
+            </View>
+          )}
           <View style={styles.fileText}>
             <Text style={styles.fileName}>
               {f.name}
@@ -163,7 +193,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
   const [files, setFiles] = useState<LocalFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentPath, setCurrentPath] = useState<string[]>([]); // Pile de dossiers relatifs
+  // Pile de sous-dossiers ouverts. En SAF, l'URI d'un sous-dossier ne se déduit pas
+  // en ajoutant son nom à celle du parent : on garde celle renvoyée par le listing.
+  const [currentPath, setCurrentPath] = useState<{ name: string; uri: string }[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{ visible: boolean; file: LocalFile | null }>({
     visible: false,
     file: null,
@@ -204,7 +236,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
 
   const dirUri = useMemo(() => {
     if (!rootUri) return null;
-    return currentPath.length > 0 ? `${rootUri}${currentPath.join("/")}/` : rootUri;
+    if (currentPath.length === 0) return rootUri;
+    if (rootUri.startsWith("content://")) return currentPath[currentPath.length - 1].uri;
+    return `${rootUri}${currentPath.map(entry => entry.name).join("/")}/`;
   }, [rootUri, currentPath]);
 
   // Reset navigation path and clear files when root directory changes (e.g. from Settings)
@@ -433,7 +467,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
 
   const onFilePress = useCallback(async (file: LocalFile) => {
     if (file.isDirectory) {
-      setCurrentPath(prev => [...prev, file.name]);
+      setCurrentPath(prev => [...prev, { name: file.name, uri: file.uri }]);
       return;
     }
 
@@ -682,7 +716,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ isActive = false }
               <Pressable style={styles.breadcrumbItem} onPress={() => setCurrentPath([])}>
                 <Ionicons name="home-outline" size={16} color={p.muted} />
               </Pressable>
-              {currentPath.map((name, idx) => (
+              {currentPath.map(({ name }, idx) => (
                 <React.Fragment key={`${name}-${idx}`}>
                   <Ionicons name="chevron-forward" size={14} color={p.subtle} style={{ marginHorizontal: 2 }} />
                   <Pressable
@@ -921,6 +955,14 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
       alignItems: "center",
       gap: 6,
       flexShrink: 0, // Ne jamais rétrécir les boutons
+    },
+    folderCover: {
+      width: isTablet ? 84 : 64,
+      height: isTablet ? 118 : 90,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: `${p.border}50`,
+      backgroundColor: `${p.text}08`,
     },
     fileIcon: {
       width: 40,
