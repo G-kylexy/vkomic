@@ -17,6 +17,7 @@ export interface VkNode {
   sizeBytes?: number;
   count?: number; // Compat PC: compteur enfants
   path?: string; // Chemin local du fichier telecharge
+  coverUrl?: string; // Jaquette VK : aperçu du document ou photo postée avec lui
 }
 
 export type VkConnectionStatus = {

@@ -260,6 +260,28 @@ class NativeDownloadService {
     }
 
     /**
+     * Retourne l'URI du sous-dossier `name` dans un dossier SAF, en le créant si besoin.
+     */
+    async ensureSafSubfolder(folderUri: string, name: string): Promise<string> {
+        if (!this.isAvailable() || !NativeDownloadModule.ensureSafSubfolder) {
+            throw new Error("Native SAF folders not available");
+        }
+        return await NativeDownloadModule.ensureSafSubfolder(folderUri, name);
+    }
+
+    /**
+     * Jaquette d'un dossier de BD (page 1 du premier tome), en cache : URI file:// ou null.
+     */
+    async getFolderCover(folderUri: string, width: number): Promise<string | null> {
+        if (!this.isAvailable() || !NativeDownloadModule.getFolderCover) return null;
+        try {
+            return await NativeDownloadModule.getFolderCover(folderUri, Math.round(width));
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Liste rapide d'un dossier SAF avec métadonnées
      */
     async listSafDirectory(folderUri: string): Promise<Array<{

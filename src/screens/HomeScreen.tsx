@@ -11,6 +11,7 @@ import {
   BackHandler,
   useWindowDimensions,
   TouchableOpacity,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -99,12 +100,14 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     folderGridRow: { flexDirection: "row", gap: gap, marginBottom: gap },
     folderGridRowLast: { marginBottom: spacing.lg },
     folderRow: {
-      flexDirection: isTablet ? "column" : "row",
-      alignItems: isTablet ? "flex-start" : "center",
+      flexDirection: "row", // jaquette à gauche, titre à droite, aussi sur tablette
+      alignItems: "center",
       backgroundColor: p.card,
       borderRadius: radius.xl,
       paddingHorizontal: isTablet ? spacing.lg : spacing.xl,
-      paddingVertical: isTablet ? spacing.lg : spacing.lg + 4,
+      // Peu de marge en haut et en bas : la jaquette occupe la hauteur de la carte
+      // et 3 rangées tiennent en entier sur tablette.
+      paddingVertical: spacing.xs,
       gap: isTablet ? spacing.md : spacing.lg,
       minHeight: isTablet ? 120 : 96,
       width: itemWidth,
@@ -112,6 +115,7 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
       borderColor: `${p.border}50`
     },
     folderRowIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: `${a.accent}15`, borderWidth: 1, borderColor: `${a.accent}30`, alignItems: "center", justifyContent: "center" },
+    folderRowChevron: { display: isTablet ? "none" : "flex" },
     folderRowTitle: { flex: 1, color: p.text, fontSize: isTablet ? 14 : 16, fontWeight: "900" },
     searchCountRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: spacing.xs },
     searchCountText: { color: a.accentBright, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
@@ -172,6 +176,8 @@ const stylesWithPalette = (p: typeof defaultPalette, a: AccentType, screenWidth:
     progressContainer: { height: 14, backgroundColor: p.surface, borderRadius: 7, overflow: "hidden", marginTop: 2, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: `${p.border}50` },
     progressBar: { height: "100%" },
     progressText: { position: "absolute", width: "100%", textAlign: "center", fontSize: 9, fontWeight: "900", color: p.text },
+    // Jaquette au format BD (ratio ~1,4), plus grande sur tablette.
+    coverThumb: { width: isTablet ? 84 : 64, height: isTablet ? 118 : 90, borderRadius: radius.sm, borderWidth: 1, borderColor: `${p.border}50`, backgroundColor: p.surface },
     iconTile: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: p.surface, borderWidth: 1, borderColor: `${p.border}80`, alignItems: "center", justifyContent: "center" },
     loadingOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: spacing.lg },
     loadingCard: { backgroundColor: p.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: `${p.border}80`, padding: spacing.lg, alignItems: "center", gap: 10, minWidth: 200 },
@@ -203,12 +209,16 @@ const FolderRow = memo<FolderRowProps>(({ node, palette: p, accent, styles, onPr
       accessibilityLabel={`Ouvrir le dossier ${node.title}`}
       accessibilityHint="Appuyez pour voir le contenu"
     >
-      <View style={styles.folderRowIcon}>
-        <Ionicons name={iconName as any} size={20} color={accent.accentBright} />
-      </View>
+      {node.coverUrl ? (
+        <Image source={{ uri: node.coverUrl }} style={styles.coverThumb} resizeMode="cover" />
+      ) : (
+        <View style={styles.folderRowIcon}>
+          <Ionicons name={iconName as any} size={20} color={accent.accentBright} />
+        </View>
+      )}
       <Text style={styles.folderRowTitle} numberOfLines={2}>{node.title}</Text>
-      {/* Sur tablette on cache peut-être le chevron car c'est plus une carte */}
-      {styles.folderRow.flexDirection === 'row' && <Ionicons name="chevron-forward" size={16} color={p.subtle} />}
+      {/* Sur tablette, les cartes en grille sont trop étroites pour le chevron */}
+      <Ionicons name="chevron-forward" size={16} color={p.subtle} style={styles.folderRowChevron} />
     </Pressable>
   );
 });
@@ -244,9 +254,13 @@ const FileRow = memo<FileRowProps>(({
   return (
     <View style={styles.fileRowContainer}>
       <View style={styles.fileRow}>
-        <View style={[styles.iconTile, { backgroundColor: fileTheme.bg, borderColor: `${fileTheme.color}30` }]}>
-          <Ionicons name={fileTheme.icon as any} size={20} color={fileTheme.color} />
-        </View>
+        {node.coverUrl ? (
+          <Image source={{ uri: node.coverUrl }} style={styles.coverThumb} resizeMode="cover" />
+        ) : (
+          <View style={[styles.iconTile, { backgroundColor: fileTheme.bg, borderColor: `${fileTheme.color}30` }]}>
+            <Ionicons name={fileTheme.icon as any} size={20} color={fileTheme.color} />
+          </View>
+        )}
         <View style={styles.fileText}>
           <Text style={styles.fileTitle} numberOfLines={2}>{node.title}</Text>
           <Text style={styles.fileSub} numberOfLines={1}>

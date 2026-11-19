@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import ReactNativeBlobUtil from "react-native-blob-util";
 
-import { expandNodesStructure, fetchNodeContent, fetchRootIndex, fetchFolderTreeUpToDepth, getDocumentDownloadUrl } from "../services/vk-service";
+import { expandNodesStructure, fetchTopicCovers, fetchNodeContent, fetchRootIndex, fetchFolderTreeUpToDepth, getDocumentDownloadUrl } from "../services/vk-service";
 import * as FolderService from "../services/FolderService";
 import * as NativeNotification from "../services/NativeNotification";
 import { nativeDownload } from "../services/NativeDownload";
@@ -258,6 +258,18 @@ const mergeTrees = (fresh: VkNode[], existing: VkNode[]): VkNode[] => {
 
 const clearSpeed = (speedRef: React.RefObject<Map<string, { bytes: number; at: number }>>, id: string) => {
   speedRef.current?.delete(id);
+};
+
+const resolvePath = (nodes: VkNode[] | null, targetId: string, currentPath: VkNode[] = []): VkNode[] | null => {
+  if (!nodes) return null;
+  for (const n of nodes) {
+    if (n.id === targetId) return [...currentPath, n];
+    if (n.children) {
+      const found = resolvePath(n.children, targetId, [...currentPath, n]);
+      if (found) return found;
+    }
+  }
+  return null;
 };
 
 // Single source of truth for temp file path - used by both processDownload and resumeDownload
@@ -517,8 +529,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const runAndroidDownload = async (item: DownloadItem) => {
-    const dir = getDownloadDirUri();
-    const isSaf = dir && isSafUri(dir);
+    const rootDir = getDownloadDirUri();
+    const isSaf = !!rootDir && isSafUri(rootDir);
+    let dir = rootDir;
+
+    // One folder per comic: "truc/<fichier>". A resumed download already has its
+    // document URI, so the folder only matters for new files.
+    const subFolder = item.subFolder ? safeFilename(item.subFolder).replace(/^[\s.]+|[\s.]+$/g, "") : "";
+    if (subFolder && rootDir) {
+      if (isSaf) {
+        dir = await nativeDownload.ensureSafSubfolder(rootDir, subFolder);
+      } else {
+        dir = `${rootDir}/${subFolder}`;
+        await ensureDir(dir);
+      }
+    }
 
     const downloadUrl = await resolveDownloadUrl(item);
 
@@ -604,7 +629,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       };
 
       try {
-        if (isSaf && nativeDownload.isAvailable()) {
+        if (isSaf && dir && nativeDownload.isAvailable()) {
           console.log(`[NativeDownload] Starting direct SAF download for ${item.title} -> ${dir}`);
           const existingSafUri = (item.path && item.path.startsWith("content://")) ? item.path : undefined;
           await nativeDownload.startDownloadToSaf(item.id, downloadUrl, dir, fileName, mimeType, callbacks, existingSafUri);
@@ -626,6 +651,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
                   if (finalUri) finalPath = finalUri;
                 } catch (e) {
                   console.warn("[NativeDownload] SAF finalization failed:", e);
+                }
+              } else if (dir) {
+                queueProgressUpdate(item.id, { progress: 99, speed: "Finalisation..." });
+                const fs = ReactNativeBlobUtil.fs;
+                const target = `${dir}/${fileName}`;
+                const copying = `${target}.copying`;
+                try {
+                  if (await fs.exists(copying)) await fs.unlink(copying);
+                  await fs.cp(tempPath, copying);
+                  const [src, dst] = await Promise.all([fs.stat(tempPath), fs.stat(copying)]);
+                  if (Number(src.size) !== Number(dst.size)) {
+                    throw new Error(`size mismatch ${src.size} != ${dst.size}`);
+                  }
+                  await fs.mv(copying, target);
+                  await fs.unlink(tempPath).catch(() => {});
+                  finalPath = target;
+                } catch (e) {
+                  await fs.unlink(copying).catch(() => {});
+                  console.warn("[NativeDownload] Move to download folder failed:", e);
                 }
               }
 
@@ -897,18 +941,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     if (isTokenInvalid) { setError(t.browser.errorSessionExpired); return; }
     setError(null);
 
-    const resolvePath = (nodes: VkNode[] | null, targetId: string, currentPath: VkNode[] = []): VkNode[] | null => {
-      if (!nodes) return null;
-      for (const n of nodes) {
-        if (n.id === targetId) return [...currentPath, n];
-        if (n.children) {
-          const found = resolvePath(n.children, targetId, [...currentPath, n]);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
     let initialNewPath: VkNode[] | null = null;
     const isSearching = searchQuery.trim().length > 0;
 
@@ -924,19 +956,24 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       setIsLoadingNode(true);
       try {
         const loaded = await fetchNodeContent(token, node);
+        let tree: VkNode[] | null = null;
         if (syncedData) {
           const updateTree = (nodes: VkNode[]): VkNode[] => nodes.map(n => {
             if (n.id === loaded.id) return mergeTrees([loaded], [n])[0];
             if (n.children) return { ...n, children: updateTree(n.children) };
             return n;
           });
-          setSyncedData(updateTree(syncedData));
+          tree = updateTree(syncedData);
+          setSyncedData(tree);
         }
+        // Les dossiers parents du chemin sont des copies : on les reprend dans l'arbre
+        // à jour, sinon en revenant en arrière la série n'aurait pas sa jaquette.
+        const fresh = (n: VkNode) => (tree && resolvePath(tree, n.id)?.slice(-1)[0]) || n;
 
         if (initialNewPath) {
-          setNavPath([...initialNewPath.slice(0, -1), loaded]);
+          setNavPath([...initialNewPath.slice(0, -1).map(fresh), loaded]);
         } else {
-          setNavPath((prev) => [...prev, loaded]);
+          setNavPath((prev) => [...prev.map(fresh), loaded]);
         }
       } catch (err) {
         setError(describeVkError(err, t, t.browser.errorLoad));
@@ -1085,6 +1122,34 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
   const currentFolder = navPath.length > 0 ? navPath[navPath.length - 1] : null;
   const rawCurrentNodes = (currentFolder?.children ?? syncedData ?? []) as VkNode[];
 
+  // Jaquettes des séries affichées mais pas encore ouvertes, demandées une seule fois.
+  const coverRequestedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!token || isTokenInvalid || !currentFolder) return;
+    const missing = rawCurrentNodes.filter((n) =>
+      n.type !== "file" && n.vkTopicId && !n.coverUrl && !coverRequestedRef.current.has(n.id)
+    );
+    if (missing.length === 0) return;
+    missing.forEach((n) => coverRequestedRef.current.add(n.id));
+    // Pas d'annulation : appliquer les jaquettes après avoir quitté le dossier est sans risque.
+    void fetchTopicCovers(token, missing, (covers) => {
+      // Ne recrée que les nœuds modifiés et leurs parents (l'arbre compte des milliers de séries).
+      const withCovers = (nodes: VkNode[]): VkNode[] => {
+        let changed = false;
+        const next = nodes.map((n) => {
+          const cover = !n.coverUrl ? covers[n.id] : undefined;
+          const children = n.children ? withCovers(n.children) : n.children;
+          if (!cover && children === n.children) return n;
+          changed = true;
+          return { ...n, ...(cover ? { coverUrl: cover } : {}), children };
+        });
+        return changed ? next : nodes;
+      };
+      setSyncedData((prev) => (prev ? withCovers(prev) : prev));
+      setNavPath((prev) => withCovers(prev));
+    });
+  }, [currentFolder?.id, rawCurrentNodes, token, isTokenInvalid]);
+
   const currentNodes = useMemo(() => {
     const q = normalizeText(debouncedQuery);
     if (!q) return rawCurrentNodes;
@@ -1146,6 +1211,19 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
+  const downloadSubFolder = (node: VkNode) => {
+    const current = navPath.length > 0 ? navPath[navPath.length - 1] : null;
+    let parent: VkNode | null;
+    if (current?.children?.some((c) => c.id === node.id)) {
+      parent = current;
+    } else {
+      const path = resolvePath(syncedData, node.id);
+      parent = path && path.length > 1 ? path[path.length - 2] : null;
+    }
+    const name = parent?.title || node.title.replace(/\.[a-z0-9]{2,5}$/i, "");
+    return safeFilename(name).replace(/^[\s.]+|[\s.]+$/g, "") || undefined;
+  };
+
   const addDownload = async (node: VkNode) => {
     if (node.type !== "file" || !node.url) { setError(t.browser.errorNoUrl); return; }
     if (isBlockedFileType(node)) { setError(t.downloads.errorBlockedType); return; }
@@ -1167,6 +1245,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
       vkOwnerId: node.vkOwnerId,
       vkDocId: node.vkDocId,
       vkAccessKey: node.vkAccessKey,
+      subFolder: downloadSubFolder(node),
     };
     setDownloads((prev) => [item, ...prev]);
     // Note: On ne notifie plus ici car le DownloadManager affiche sa propre notification avec barre de progression

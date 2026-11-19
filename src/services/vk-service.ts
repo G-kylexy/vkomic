@@ -220,6 +220,7 @@ const fetchNodesStructureBatch = async (token: string, nodes: VkNode[]): Promise
               children,
               isLoaded: true,
               structureOnly: true,
+              coverUrl: node.coverUrl || firstCover(children),
             };
           }
           return node;
@@ -657,15 +658,40 @@ const parseTopicBodyEnhanced = (text: string, excludeTopicId?: string): VkNode[]
   return nodes;
 };
 
+// Taille d'image VK la plus proche de ~400 px de large (jaquette nette sans gros fichier).
+const pickImageUrl = (sizes: any[] | undefined): string | undefined => {
+  if (!Array.isArray(sizes) || sizes.length === 0) return undefined;
+  const withUrl = sizes
+    .map((s: any) => ({ url: s?.url || s?.src, width: Number(s?.width) || 0 }))
+    .filter((s) => typeof s.url === "string" && s.url.startsWith("https://"));
+  if (withUrl.length === 0) return undefined;
+  const big = withUrl.filter((s) => s.width >= 300).sort((a, b) => a.width - b.width);
+  return (big[0] || withUrl.sort((a, b) => b.width - a.width)[0]).url;
+};
+
 const extractDocuments = (items: any[]): VkNode[] => {
   const nodes: VkNode[] = [];
   const seenDocuments = new Set<string>();
+  // Les uploadeurs postent souvent la couverture en photo, dans le même message que
+  // le fichier ou juste avant : on garde la dernière photo vue.
+  let lastPhotoUrl: string | undefined;
 
   items.forEach((item: any) => {
     if (!item.attachments) return;
 
+    const photos: string[] = item.attachments
+      .filter((att: any) => att.type === "photo")
+      .map((att: any) => pickImageUrl(att.photo?.sizes))
+      .filter((url: string | undefined): url is string => !!url);
+    const docCount = item.attachments.filter((att: any) => att.type === "doc").length;
+    // Autant de photos que de fichiers : la n-ième photo est la couverture du n-ième tome.
+    const pairByIndex = photos.length > 1 && photos.length === docCount;
+    if (photos.length > 0) lastPhotoUrl = photos[0];
+    let docIndex = -1;
+
     item.attachments.forEach((att: any) => {
       if (att.type !== "doc") return;
+      docIndex++;
 
       const doc = att.doc;
       if (!doc || doc.owner_id === undefined || doc.id === undefined) return;
@@ -691,12 +717,58 @@ const extractDocuments = (items: any[]): VkNode[] => {
         vkDocId: docId,
         vkAccessKey: doc.access_key,
         isLoaded: true,
+        // VK ne génère pas d'aperçu pour les PDF/CBZ : on prend la photo postée avec.
+        coverUrl: pickImageUrl(doc.preview?.photo?.sizes)
+          || (pairByIndex ? photos[docIndex] : lastPhotoUrl),
       });
     });
   });
 
   return nodes;
 };
+
+/**
+ * Jaquettes de séries pas encore ouvertes : seuls les premiers messages de chaque
+ * sujet sont lus (25 sujets par appel execute), et la première photo trouvée sert
+ * de couverture. onBatch reçoit { idDuNoeud: urlImage } après chaque lot.
+ */
+export const fetchTopicCovers = async (
+  token: string,
+  nodes: VkNode[],
+  onBatch: (covers: Record<string, string>) => void,
+): Promise<void> => {
+  const topics = nodes.filter((n) => n.vkGroupId && n.vkTopicId);
+  for (let i = 0; i < topics.length; i += 25) {
+    const batch = topics.slice(i, i + 25);
+    const calls = batch
+      .map((n) => `API.board.getComments({group_id:${n.vkGroupId},topic_id:${n.vkTopicId},count:5})`)
+      .join(",");
+    const url = `https://api.vk.ru/method/execute?v=${API_VERSION}&code=${encodeURIComponent(`return [${calls}];`)}`;
+    const covers: Record<string, string> = {};
+    try {
+      const data = await executeRequest<any>(url, token);
+      if (!Array.isArray(data?.response)) continue;
+      data.response.forEach((resp: any, index: number) => {
+        for (const item of resp?.items || []) {
+          const photo = (item.attachments || []).find((att: any) => att.type === "photo");
+          const cover = pickImageUrl(photo?.photo?.sizes);
+          if (cover) {
+            covers[batch[index].id] = cover;
+            return;
+          }
+        }
+      });
+    } catch (error) {
+      logWarn("VK covers batch failed.", error);
+    }
+    if (Object.keys(covers).length > 0) onBatch(covers);
+    if (i + 25 < topics.length) await sleep(400); // reste sous la limite de 3 requêtes/s
+  }
+};
+
+/** Jaquette d'un dossier : celle de son premier fichier qui en a une. */
+const firstCover = (children: VkNode[]): string | undefined =>
+  children.find((c) => c.coverUrl)?.coverUrl;
 
 // --- SERVICES PRINCIPAUX ---
 
@@ -839,6 +911,7 @@ export const fetchNodeContent = async (token: string, node: VkNode): Promise<VkN
         children: allChildren,
         isLoaded: true,
         type: documents.length > 0 ? "series" : "genre",
+        coverUrl: node.coverUrl || firstCover(allChildren),
       };
     }
 
