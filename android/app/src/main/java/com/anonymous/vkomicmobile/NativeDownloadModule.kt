@@ -3,6 +3,7 @@ package com.anonymous.vkomicmobile
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Environment
@@ -164,6 +165,7 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
     }
 
     /** Finds the child folder [name] in [parent], or creates it. */
+    @Synchronized
     private fun findOrCreateSubfolder(parent: Uri, name: String): Uri {
         val resolver = reactApplicationContext.contentResolver
         val parentId = DocumentsContract.getDocumentId(parent)
@@ -208,6 +210,9 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
     // Covers are rendered one at a time, away from the download threads.
     private val coverExecutor = Executors.newSingleThreadExecutor()
     private val coverImageExtensions = setOf("jpg", "jpeg", "png", "webp")
+    private val MAX_COVER_ENTRY_BYTES = 30 * 1024 * 1024
+    private val MAX_COVER_RATIO = 3
+    private val FAILED_COVER_TTL_MS = 24L * 60 * 60 * 1000
 
     /** Sort key so "T2" comes before "T10". */
     private fun naturalKey(name: String): String =
@@ -228,10 +233,13 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
             if (renderer.pageCount == 0) return null
             val page = renderer.openPage(0)
             try {
-                val height = (width.toDouble() * page.height / page.width).toInt().coerceAtLeast(1)
+                if (page.width <= 0 || page.height <= 0) return null
+                val scale = width.toFloat() / page.width
+                val height = (page.height * scale).toInt().coerceIn(1, width * MAX_COVER_RATIO)
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 bitmap.eraseColor(Color.WHITE)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                val matrix = Matrix().apply { setScale(scale, scale) }
+                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 return bitmap
             } finally {
                 page.close()
@@ -241,33 +249,67 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
         }
     }
 
+    private fun readBoundedEntry(zip: ZipInputStream, declaredSize: Long): ByteArray? {
+        if (declaredSize in 0..MAX_COVER_ENTRY_BYTES.toLong()) {
+            val data = ByteArray(declaredSize.toInt())
+            var off = 0
+            while (off < data.size) {
+                val n = zip.read(data, off, data.size - off)
+                if (n < 0) return null
+                off += n
+            }
+            return if (zip.read() < 0) data else null
+        }
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val n = zip.read(buffer)
+            if (n < 0) break
+            if (out.size() + n > MAX_COVER_ENTRY_BYTES) return null
+            out.write(buffer, 0, n)
+        }
+        return out.toByteArray()
+    }
+
     /** First image of a CBZ archive, by natural name order (page 1 is the cover). */
     private fun renderCbzCover(uri: Uri, width: Int): Bitmap? {
-        val resolver = reactApplicationContext.contentResolver
-        val names = mutableListOf<String>()
-        resolver.openInputStream(uri)?.use { raw ->
+        var bestKey: String? = null
+        var bytes: ByteArray? = null
+        reactApplicationContext.contentResolver.openInputStream(uri)?.use { raw ->
             ZipInputStream(raw.buffered()).use { zip ->
                 generateSequence { zip.nextEntry }.forEach { entry ->
                     val ext = entry.name.substringAfterLast('.', "").lowercase()
-                    if (!entry.isDirectory && ext in coverImageExtensions &&
-                        !entry.name.substringAfterLast('/').startsWith(".")
-                    ) names.add(entry.name)
+                    if (entry.isDirectory || ext !in coverImageExtensions ||
+                        entry.name.substringAfterLast('/').startsWith(".")
+                    ) return@forEach
+                    if (entry.size == 0L || entry.size > MAX_COVER_ENTRY_BYTES) return@forEach
+                    val key = naturalKey(entry.name)
+                    if (bestKey != null && key >= bestKey!!) return@forEach
+                    val data = readBoundedEntry(zip, entry.size) ?: return@forEach
+                    if (data.isEmpty()) return@forEach
+                    bestKey = key
+                    bytes = data
                 }
             }
         }
-        val first = names.minByOrNull { naturalKey(it) } ?: return null
-        val bytes = resolver.openInputStream(uri)?.use { raw ->
-            ZipInputStream(raw.buffered()).use { zip ->
-                generateSequence { zip.nextEntry }.firstOrNull { it.name == first }?.let { zip.readBytes() }
-            }
-        } ?: return null
+        val data = bytes ?: return null
+
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val maxHeight = width * MAX_COVER_RATIO
         var sample = 1
-        while (bounds.outWidth / (sample * 2) >= width) sample *= 2
-        val decoded = BitmapFactory.decodeByteArray(
-            bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }
+        while (bounds.outWidth / (sample * 2) >= width || bounds.outHeight / (sample * 2) >= maxHeight) {
+            sample *= 2
+        }
+        var decoded = BitmapFactory.decodeByteArray(
+            data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample }
         ) ?: return null
+        if (decoded.height > decoded.width * MAX_COVER_RATIO) {
+            val top = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.width * MAX_COVER_RATIO)
+            if (top != decoded) decoded.recycle()
+            decoded = top
+        }
         if (decoded.width <= width) return decoded
         val scaled = Bitmap.createScaledBitmap(
             decoded, width, (width.toDouble() * decoded.height / decoded.width).toInt().coerceAtLeast(1), true
@@ -322,14 +364,33 @@ class NativeDownloadModule(private val reactContext: ReactApplicationContext) : 
                     promise.resolve("file://${target.absolutePath}")
                     return@submit
                 }
-
-                val albumUri = DocumentsContract.buildDocumentUriUsingTree(folder, album.id)
-                val bitmap = if (album.name.lowercase().endsWith(".pdf")) {
-                    renderPdfCover(albumUri, width)
-                } else {
-                    renderCbzCover(albumUri, width)
+                val failed = File(target.path + ".failed")
+                if (failed.exists() && System.currentTimeMillis() - failed.lastModified() < FAILED_COVER_TTL_MS) {
+                    promise.resolve(null)
+                    return@submit
                 }
-                promise.resolve(bitmap?.let { saveCover(it, target) })
+
+                runCatching {
+                    failed.delete()
+                    failed.createNewFile()
+                }
+                val albumUri = DocumentsContract.buildDocumentUriUsingTree(folder, album.id)
+                val bitmap = try {
+                    if (album.name.lowercase().endsWith(".pdf")) {
+                        renderPdfCover(albumUri, width)
+                    } else {
+                        renderCbzCover(albumUri, width)
+                    }
+                } catch (e: Throwable) {
+                    null
+                }
+                if (bitmap == null) {
+                    promise.resolve(null)
+                } else {
+                    val saved = saveCover(bitmap, target)
+                    failed.delete()
+                    promise.resolve(saved)
+                }
             } catch (e: Throwable) {
                 // A damaged or half-downloaded album just keeps the folder icon.
                 promise.resolve(null)

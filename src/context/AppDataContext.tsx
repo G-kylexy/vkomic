@@ -260,6 +260,18 @@ const clearSpeed = (speedRef: React.RefObject<Map<string, { bytes: number; at: n
   speedRef.current?.delete(id);
 };
 
+const resolvePath = (nodes: VkNode[] | null, targetId: string, currentPath: VkNode[] = []): VkNode[] | null => {
+  if (!nodes) return null;
+  for (const n of nodes) {
+    if (n.id === targetId) return [...currentPath, n];
+    if (n.children) {
+      const found = resolvePath(n.children, targetId, [...currentPath, n]);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
 // Single source of truth for temp file path - used by both processDownload and resumeDownload
 const getTempFilePath = (id: string, extension?: string): string => {
   const ext = extension ? `.${extension}` : '';
@@ -640,6 +652,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
                 } catch (e) {
                   console.warn("[NativeDownload] SAF finalization failed:", e);
                 }
+              } else if (dir) {
+                queueProgressUpdate(item.id, { progress: 99, speed: "Finalisation..." });
+                const fs = ReactNativeBlobUtil.fs;
+                const target = `${dir}/${fileName}`;
+                const copying = `${target}.copying`;
+                try {
+                  if (await fs.exists(copying)) await fs.unlink(copying);
+                  await fs.cp(tempPath, copying);
+                  const [src, dst] = await Promise.all([fs.stat(tempPath), fs.stat(copying)]);
+                  if (Number(src.size) !== Number(dst.size)) {
+                    throw new Error(`size mismatch ${src.size} != ${dst.size}`);
+                  }
+                  await fs.mv(copying, target);
+                  await fs.unlink(tempPath).catch(() => {});
+                  finalPath = target;
+                } catch (e) {
+                  await fs.unlink(copying).catch(() => {});
+                  console.warn("[NativeDownload] Move to download folder failed:", e);
+                }
               }
 
               // Success update
@@ -909,18 +940,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!token) { setError(t.browser.errorNoToken); return; }
     if (isTokenInvalid) { setError(t.browser.errorSessionExpired); return; }
     setError(null);
-
-    const resolvePath = (nodes: VkNode[] | null, targetId: string, currentPath: VkNode[] = []): VkNode[] | null => {
-      if (!nodes) return null;
-      for (const n of nodes) {
-        if (n.id === targetId) return [...currentPath, n];
-        if (n.children) {
-          const found = resolvePath(n.children, targetId, [...currentPath, n]);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
 
     let initialNewPath: VkNode[] | null = null;
     const isSearching = searchQuery.trim().length > 0;
@@ -1192,10 +1211,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
 
-  // Folder named after the comic the file belongs to (the VK folder being browsed),
-  // or after the file itself when it was opened from a search result.
   const downloadSubFolder = (node: VkNode) => {
-    const parent = navPath.length > 0 ? navPath[navPath.length - 1] : null;
+    const current = navPath.length > 0 ? navPath[navPath.length - 1] : null;
+    let parent: VkNode | null;
+    if (current?.children?.some((c) => c.id === node.id)) {
+      parent = current;
+    } else {
+      const path = resolvePath(syncedData, node.id);
+      parent = path && path.length > 1 ? path[path.length - 2] : null;
+    }
     const name = parent?.title || node.title.replace(/\.[a-z0-9]{2,5}$/i, "");
     return safeFilename(name).replace(/^[\s.]+|[\s.]+$/g, "") || undefined;
   };
